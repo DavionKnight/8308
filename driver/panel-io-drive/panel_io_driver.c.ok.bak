@@ -1,0 +1,308 @@
+#include <linux/init.h>
+#include <linux/module.h>
+#include <linux/ioctl.h>
+#include <linux/fs.h>
+#include <linux/device.h>
+#include <linux/err.h>
+#include <linux/list.h>
+#include <linux/errno.h>
+#include <linux/mutex.h>
+#include <linux/slab.h>
+#include <linux/smp_lock.h>
+#include <asm/uaccess.h>
+#include <linux/pci.h>
+#include <linux/of_platform.h>
+#include <asm/time.h>
+#include <asm/ipic.h>
+#include <asm/udbg.h>
+#include <sysdev/fsl_pci.h>
+#include <sysdev/fsl_soc.h>
+#include <linux/spi/spi.h>
+
+
+#include <asm/qe.h>
+#include <asm/qe_ic.h>
+#include <linux/delay.h>
+
+
+#include "panel_io_driver.h"
+
+#define 		PANEL_IO_DEV_MAJOR  	 231
+#define 		DRIVER_NAME			"panel_io"
+
+#define 		MPC8XXX_GPIO_PINS		32
+
+#define		GPIO_ADDR_OFFSET           0xc00
+#define         SICRH_ADDR_OFFSET         0x118
+
+#define 		GPIO_DIR				0x00
+#define 		GPIO_ODR				0x04
+#define 		GPIO_DAT				0x08
+#define 		GPIO_IER				0x0c
+#define 		GPIO_IMR				0x10
+#define 		GPIO_ICR				0x14
+
+//new add
+#define RST_SWITCH        16
+#define MPC8XXX_GPIO_PINS	32
+//new end
+
+static struct mutex		ioctl_lock;
+
+void __iomem *immap;
+
+
+static inline u32 mpc8xxx_gpio2mask(unsigned int gpio)
+{
+	return 1u << (MPC8XXX_GPIO_PINS - 1 - gpio);
+}
+
+//note retvlaue
+static void set_gpio_pin_value(struct file *filp, unsigned int pin, unsigned char led_value)
+{
+	int d;
+	
+	d = mpc8xxx_gpio2mask(pin);
+
+	if( led_value == LED_ON )
+	{
+		clrbits32( immap+0xc00+ GPIO_DAT, d);		
+	}
+	else
+	{
+		if( led_value == LED_OFF)
+		{
+			setbits32( immap+0xc00+ GPIO_DAT, d);
+		}
+	}
+}
+
+//add return value
+static unsigned char get_gpio_pin_value(struct file *filp, unsigned int pin)
+{
+	int d;
+	int tmp;
+	unsigned char ret;
+	int tmp1;
+	
+	tmp = in_be32(immap +GPIO_ADDR_OFFSET+ GPIO_DAT);
+	//printk("tmp = %08x,\n",tmp); 
+
+	d = mpc8xxx_gpio2mask(pin);
+	
+	//printk("d = %08x,\n",d); 
+	
+	//tmp1 =( (d && tmp) >> (MPC8XXX_GPIO_PINS - pin));
+	tmp1 = (d & tmp);
+	//printk("temp1 = %08x,\n",tmp1);
+	tmp1 = (tmp1) >>  (MPC8XXX_GPIO_PINS -1- pin);
+	//printk("temp1 = %08x,\n",tmp1);
+	ret = (u8)tmp1;
+	return ret;
+}
+
+static long
+panel_io_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	int			err = 0;
+	int			retval = 0;
+	u8			tmp;
+	u8   			led_vlaue;
+
+//	int d;
+
+	
+
+	
+	if (_IOC_TYPE(cmd) != PANEL_IO_MAGIC)
+		return -ENOTTY;
+
+	if (_IOC_DIR(cmd) & _IOC_READ)
+		err = !access_ok(VERIFY_WRITE,
+				(void __user *)arg, _IOC_SIZE(cmd));
+	if (err == 0 && _IOC_DIR(cmd) & _IOC_WRITE)
+		err = !access_ok(VERIFY_READ,
+				(void __user *)arg, _IOC_SIZE(cmd));
+	if (err)
+		return -EFAULT;
+
+	mutex_lock(&ioctl_lock);
+
+	switch (cmd) 
+	{
+		//read
+		case PANEL_IOC_MASK_KEY:
+			tmp = get_gpio_pin_value(filp, 13);
+			retval = __put_user(tmp, (__u8 __user *)arg);
+		break;
+
+		case PANEL_IOC_AUTO_KEY_N:
+			tmp = get_gpio_pin_value(filp, 14);
+			retval = __put_user(tmp, (__u8 __user *)arg);
+		break;
+		
+	       //write 
+		case  PANEL_IOC_WR_LED_RUN:
+			retval = __get_user(tmp, (u8 __user *)arg);
+			if (retval == 0) 
+			{
+				led_vlaue = tmp & 0x01;
+				set_gpio_pin_value(filp, 5, led_vlaue);
+		      }
+		     break;
+			 
+		case  PANEL_IOC_WR_LED_ACT:
+			retval = __get_user(tmp, (u8 __user *)arg);
+			if (retval == 0) 
+			{
+				led_vlaue = tmp & 0x01;
+				set_gpio_pin_value(filp, 6, led_vlaue);
+		      }
+		     break;
+			 
+	     case  PANEL_IOC_WR_LED_ALM:
+		 	retval = __get_user(tmp, (u8 __user *)arg);
+			if (retval == 0) 
+			{
+				led_vlaue = tmp & 0x01;
+				set_gpio_pin_value(filp, 7, led_vlaue);
+		      }
+			break;
+			
+	     case  PANEL_IOC_WR_LED_MASK: 	
+		 	retval = __get_user(tmp, (u8 __user *)arg);
+			if (retval == 0) 
+			{
+				led_vlaue = tmp & 0x01;
+				set_gpio_pin_value(filp, 8, led_vlaue);
+		      }
+			break;
+			
+	    case PANEL_IOC_WR_PALARM:
+			retval = __get_user(tmp, (u8 __user *)arg);
+			if (retval == 0) 
+			{
+				led_vlaue = tmp & 0x01;
+				//printk("PALARM, ***********value = %d \n" ,led_vlaue);
+				set_gpio_pin_value(filp, 11, led_vlaue);
+		      }
+			break;
+			
+	    case PANEL_IOC_WR_DALARM:
+			retval = __get_user(tmp, (u8 __user *)arg);
+			if (retval == 0) 
+			{	
+				led_vlaue = tmp & 0x01;
+				//printk("PALARM***********value = %d \n" ,led_vlaue);
+				set_gpio_pin_value(filp, 12, led_vlaue);
+		      }
+			break;
+		default:
+		/*	d = in_be32(immap +0xc00+ GPIO_DAT);
+			d |= 0x07980000;//5 6 7 8 LED off
+			d &= 0xffe70000; //12 12 palarm dalarm off
+			out_be32( immap +0xc00+ GPIO_DAT, d);*/
+			break;
+			
+	}
+	
+	mutex_unlock(&ioctl_lock);
+
+	return retval;
+}
+
+static int panel_io_open(struct inode *inode, struct file *filp)
+{
+	return 0;
+}
+static int panel_io_release(struct inode *inode, struct file *filp)
+{
+   return 0;
+}
+
+static struct file_operations panel_io_fops = {
+	.owner =	THIS_MODULE,
+	.unlocked_ioctl = panel_io_ioctl,
+	.open =		panel_io_open,
+	.release =	panel_io_release,
+};
+
+static int __init panel_io_init(void)
+{
+	int status =0;
+	int d;
+	
+	status = register_chrdev(PANEL_IO_DEV_MAJOR, DRIVER_NAME, &panel_io_fops);
+	if( status <  0)
+	{
+		printk("stauts = %d \n", status);
+		return status;
+	}
+
+	mutex_init(&ioctl_lock);
+	
+	immap = ioremap(get_immrbase(), 0xd00);
+	if(immap)
+	{
+		
+	
+		d = mpc8xxx_gpio2mask(23);//datasheet p167
+	       setbits32(immap + 0x118, d);//bit23 = 1
+	
+		
+		d = in_be32(immap +0x118+ GPIO_DIR);
+		d |= 0x0033c000;
+		out_be32( immap +0x118+ GPIO_DIR, d);//change pin function to GPIO
+		
+		d = in_be32(immap +0xc00+ GPIO_DIR);
+		d |= 0x0798000;//5 6 7 8 11 12 off
+		out_be32( immap +0xc00+ GPIO_DIR, d);
+		
+		d = in_be32(immap +0xc00+ GPIO_DAT);
+		d |= 0x0798000;//5 6 7 8 LED off
+		//d &= 0xffe7ffff; //12 12 palarm dalarm off
+		out_be32( immap +0xc00+ GPIO_DAT, d);
+
+/*			
+		d = in_be32(immap +0xc00+ GPIO_DIR);//
+		d &= 0xfff90000; 
+		out_be32( immap +0xc00+ GPIO_DIR, d);
+*/		
+
+		//new add
+		/* d = mpc8xxx_gpio2mask(0);
+	    	 setbits32(immap + 0x118, d);  
+		 d = mpc8xxx_gpio2mask(1);
+	         setbits32(immap + 0x118, d);
+
+		 d = mpc8xxx_gpio2mask(16);
+	    	 setbits32(immap + 0x118, d);  
+		 d = mpc8xxx_gpio2mask(17);
+	        setbits32(immap + 0x118, d);
+
+		d = mpc8xxx_gpio2mask(RST_SWITCH);
+		setbits32(immap + 0xc00+GPIO_DIR, d);
+		clrbits32(immap +0xc00+ GPIO_DAT, d);//RESET SWITCH
+		ndelay(nsecs);
+		setbits32(immap + 0xc00+ GPIO_DAT, d);//finist SWITCH
+		ndelay(nsecs);*/
+              //end
+	       
+	}
+	else
+	{
+		status = -1;//return value
+		iounmap(immap);
+	}
+
+	return status;
+}
+static void __exit panel_io_exit(void)
+{
+   	unregister_chrdev(PANEL_IO_DEV_MAJOR, DRIVER_NAME);
+	iounmap(immap);
+}
+module_init(panel_io_init);
+module_exit(panel_io_exit);
+MODULE_LICENSE("GPL");
+

@@ -1,0 +1,1 @@
+cmd_/home/freddie/Documents/H18EDD2402B/driver/sfp_fpga_drv_v3/sfp_fpga_drv.ko := ppc_82xx-ld -m elf32ppc -r   arch/powerpc/lib/crtsavres.o  -o /home/freddie/Documents/H18EDD2402B/driver/sfp_fpga_drv_v3/sfp_fpga_drv.ko /home/freddie/Documents/H18EDD2402B/driver/sfp_fpga_drv_v3/sfp_fpga_drv.o /home/freddie/Documents/H18EDD2402B/driver/sfp_fpga_drv_v3/sfp_fpga_drv.mod.o

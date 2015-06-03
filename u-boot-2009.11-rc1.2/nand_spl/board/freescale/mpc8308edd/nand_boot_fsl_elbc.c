@@ -1,0 +1,1 @@
+/home/freddie/Documents/HX/u-boot-2009.11-rc1.2/nand_spl/nand_boot_fsl_elbc.c

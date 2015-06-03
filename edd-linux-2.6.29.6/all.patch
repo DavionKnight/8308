@@ -1,0 +1,1147 @@
+# patch -Np0 < all.patch
+
+
+Index: Makefile
+===================================================================
+--- Makefile.orig
++++ Makefile
+@@ -1,7 +1,7 @@
+ VERSION = 2
+ PATCHLEVEL = 6
+ SUBLEVEL = 27
+-EXTRAVERSION = .21
++EXTRAVERSION = .21-ZebOS790
+ NAME = Trembling Tortoise
+ 
+ # *DOCUMENTATION*
+Index: include/linux/skbuff.h
+===================================================================
+--- include/linux/skbuff.h.orig
++++ include/linux/skbuff.h
+@@ -164,7 +164,6 @@ struct skb_shared_info {
+ #define SKB_DATAREF_SHIFT 16
+ #define SKB_DATAREF_MASK ((1 << SKB_DATAREF_SHIFT) - 1)
+ 
+-
+ enum {
+ 	SKB_FCLONE_UNAVAILABLE,
+ 	SKB_FCLONE_ORIG,
+@@ -343,6 +342,8 @@ struct sk_buff {
+ 				*data;
+ 	unsigned int		truesize;
+ 	atomic_t		users;
++
++	int	enable_mpls_fwd;
+ };
+ 
+ #ifdef __KERNEL__
+Index: include/net/ip.h
+===================================================================
+--- include/net/ip.h.orig
++++ include/net/ip.h
+@@ -390,4 +390,10 @@ int ipv4_doint_and_flush_strategy(ctl_ta
+ extern int ip_misc_proc_init(void);
+ #endif
+ 
++extern int mpls_fragment (struct sk_buff *, int);
++extern int l2_send_frame (struct sk_buff *);
++int mpls_ip_output (struct sk_buff *);
++void mpls_register_output_hdlr (int (*fn) (struct sk_buff **));
++void mpls_unregister_output_hdlr (void);
++int mpls_ipip_output (struct sk_buff *);
+ #endif	/* _IP_H */
+Index: include/net/ip_fib.h
+===================================================================
+--- include/net/ip_fib.h.orig
++++ include/net/ip_fib.h
+@@ -224,6 +224,7 @@ extern int fib_sync_down_addr(struct net
+ extern int fib_sync_up(struct net_device *dev);
+ extern __be32  __fib_res_prefsrc(struct fib_result *res);
+ extern void fib_select_multipath(const struct flowi *flp, struct fib_result *res);
++extern int mpls_ip_fib_lookup (struct net *net, struct flowi *flp, struct fib_result *result);
+ 
+ /* Exported by fib_{hash|trie}.c */
+ extern void fib_hash_init(void);
+Index: include/net/sock.h
+===================================================================
+--- include/net/sock.h.orig
++++ include/net/sock.h
+@@ -279,6 +279,7 @@ struct sock {
+   	int			(*sk_backlog_rcv)(struct sock *sk,
+ 						  struct sk_buff *skb);  
+ 	void                    (*sk_destruct)(struct sock *sk);
++  int       enable_mpls_fwd; /* mpls fwd flag */
+ };
+ 
+ /*
+Index: net/ipv4/arp.c
+===================================================================
+--- net/ipv4/arp.c.orig
++++ net/ipv4/arp.c
+@@ -509,6 +509,9 @@ int arp_bind_neighbour(struct dst_entry 
+ 		__be32 nexthop = ((struct rtable*)dst)->rt_gateway;
+ 		if (dev->flags&(IFF_LOOPBACK|IFF_POINTOPOINT))
+ 			nexthop = 0;
++    else if (nexthop == 0)
++      return -EINVAL;
++
+ 		n = __neigh_lookup_errno(
+ #if defined(CONFIG_ATM_CLIP) || defined(CONFIG_ATM_CLIP_MODULE)
+ 		    dev->type == ARPHRD_ATM ? clip_tbl_hook :
+@@ -1407,6 +1410,7 @@ static int __init arp_proc_init(void)
+ 
+ #endif /* CONFIG_PROC_FS */
+ 
++EXPORT_SYMBOL(arp_bind_neighbour);
+ EXPORT_SYMBOL(arp_broken_ops);
+ EXPORT_SYMBOL(arp_find);
+ EXPORT_SYMBOL(arp_create);
+Index: net/ipv4/fib_frontend.c
+===================================================================
+--- net/ipv4/fib_frontend.c.orig
++++ net/ipv4/fib_frontend.c
+@@ -1065,6 +1065,16 @@ void __init ip_fib_init(void)
+ 	fib_hash_init();
+ }
+ 
++int
++mpls_ip_fib_lookup (struct net *net, struct flowi *flp, 
++		    struct fib_result *result)
++{
++  return fib_lookup (net, flp, result);
++}
++
++
++EXPORT_SYMBOL(mpls_ip_fib_lookup);
++
+ EXPORT_SYMBOL(inet_addr_type);
+ EXPORT_SYMBOL(inet_dev_addr_type);
+ EXPORT_SYMBOL(ip_dev_find);
+Index: net/ipv4/ip_input.c
+===================================================================
+--- net/ipv4/ip_input.c.orig
++++ net/ipv4/ip_input.c
+@@ -441,3 +441,5 @@ drop:
+ out:
+ 	return NET_RX_DROP;
+ }
++
++EXPORT_SYMBOL(ip_rcv);
+Index: net/ipv4/ip_output.c
+===================================================================
+--- net/ipv4/ip_output.c.orig
++++ net/ipv4/ip_output.c
+@@ -82,6 +82,8 @@
+ 
+ int sysctl_ip_default_ttl __read_mostly = IPDEFTTL;
+ 
++int (*mpls_output) (struct sk_buff **) = NULL;
++
+ /* Generate a checksum for an outgoing IP datagram. */
+ __inline__ void ip_send_check(struct iphdr *iph)
+ {
+@@ -300,6 +302,15 @@ int ip_output(struct sk_buff *skb)
+ 
+ 	IP_INC_STATS(dev_net(dev), IPSTATS_MIB_OUTREQUESTS);
+ 
++	if (skb->enable_mpls_fwd == 1)
++	  {
++	    skb->enable_mpls_fwd = 0;
++	    if (skb->len > dst_mtu(skb->dst) && !skb_shinfo(skb)->gso_size)
++	      return ip_fragment (skb, mpls_ip_output);
++	    
++	    return mpls_ip_output (skb);
++	  }
++
+ 	skb->dev = dev;
+ 	skb->protocol = htons(ETH_P_IP);
+ 
+@@ -1330,6 +1341,278 @@ static int ip_reply_glue_bits(void *dptr
+ }
+ 
+ /*
++ * macro that sends an sk_buff out. The following fields of the sk_buff
++ * should be set
++ * sk->dev, sk->dst
++ * It takes the nexthop from the sk->dst->neighbour->ha field
++ * The sk_buff passed to it, is freed.
++ */
++int l2_send_frame (struct sk_buff *sk)
++{
++  struct hh_cache *hh = NULL;
++  int retval;
++  unsigned seq;
++
++  /*
++   * cached hardware header, if any
++   */
++  hh = sk->dst->hh;
++  if(hh) 
++  {
++    /* read_lock_bh(&hh->hh_lock); */
++    seq = read_seqbegin(&hh->hh_lock);
++    memmove(sk->data - 16, hh->hh_data, 16);
++    /*
++     * IMPLICITNULL hack
++     */
++    *((u16 *)sk->data - 1) = sk->protocol;
++    /* read_unlock_bh(&hh->hh_lock); */
++    read_seqretry(&hh->hh_lock, seq);
++    skb_push(sk, hh->hh_len);
++    retval = hh->hh_output(sk);
++  } 
++  else if(sk->dst->neighbour) 
++  {
++    retval = sk->dst->neighbour->output(sk);
++  }
++  else 
++  {
++    kfree_skb(sk);
++    retval = -1;
++  }
++  return retval;
++} 
++
++/*
++ * Linux ip_fragment function modified to handle MPLS labelled packets
++ * 'max_frag_size' is the maximum permissible size (excluding link layer 
++ * header) of each fragment.
++ */
++int mpls_fragment(struct sk_buff *skb, int max_frag_size)
++{
++  struct iphdr     *iph;
++  unsigned char    *raw;
++  unsigned char    *ptr;
++  struct net_device *dev;
++  struct sk_buff   *skb2;
++  unsigned int      mtu, hlen, left, len;
++  int               offset;
++  int               not_last_frag;
++
++  /*
++   * size of the shim header, 0 if not present
++   */
++  int               shim_size = 0;
++  struct rtable    *rt = (struct rtable *)skb->dst;
++  int               err = 0;
++  u32               common_to_all;
++
++  dev = rt->u.dst.dev;
++
++  /*
++   *    Point into the IP datagram header.
++   */
++  raw = skb->network_header;
++  iph = (struct iphdr *)raw;
++
++  shim_size = raw - skb->data;
++
++  /*
++   *    Setup starting values.
++   */
++
++  /*
++   * IP header length including options.
++   */
++  hlen = iph->ihl * 4;
++  /*
++   * how much of the data is to be fragmented.
++   */
++  left = ntohs(iph->tot_len) - hlen;
++  /*
++   * starting from the skb->data pointer, this much of the packet 
++   * should go in all fragments
++   */
++  common_to_all = (raw - skb->data + hlen);
++  /* 
++   * Size of data space in each fragment.
++   */
++  mtu = max_frag_size - common_to_all;
++
++  ptr = raw + hlen;                    /* Where to start from */
++
++  /*
++   *    Fragment the datagram.
++   */
++
++  offset = (ntohs(iph->frag_off) & IP_OFFSET) << 3;
++  not_last_frag = iph->frag_off & htons(IP_MF);
++
++  /*
++   *    Keep copying data until we run out.
++   */
++
++  while (left > 0)
++    {
++      len = left;
++      /* IF: it doesn't fit, use 'mtu' - the data space left */
++      if (len > mtu)
++	len = mtu;
++      /* IF: we are not sending upto and including the packet end
++	 then align the next start on an eight byte boundary */
++      if (len < left)
++        {
++	  len &= ~7;
++        }
++      /*
++       *    Allocate buffer.
++       */
++
++      if ((skb2 =
++	   alloc_skb(len + common_to_all + dev->hard_header_len + 15,
++		     GFP_ATOMIC)) == NULL)
++        {
++	  NETDEBUG (KERN_ERR "IP: frag: no memory for new "
++			    "fragment!\n");
++	  err = -ENOMEM;
++	  goto fail;
++        }
++
++      /*
++       *    Set up data on packet
++       */
++
++      skb2->protocol = skb->protocol;
++      skb2->pkt_type = skb->pkt_type;
++      skb2->priority = skb->priority;
++      skb_reserve(skb2, (dev->hard_header_len + 15) & ~15);
++      skb_put(skb2, common_to_all + len);
++      skb2->network_header = skb2->data + shim_size;
++      skb2->transport_header = skb2->network_header + hlen;
++
++      /*
++       *    Charge the memory for the fragment to any owner
++       *    it might possess
++       */
++
++      if (skb->sk)
++	skb_set_owner_w(skb2, skb->sk);
++      skb2->dst = dst_clone(skb->dst);
++      skb2->dev = skb->dev;
++
++      /*
++       *    Copy the packet header into the new buffer.
++       */
++      memcpy(skb2->data, skb->data, common_to_all);
++
++      /*
++       *    Copy a block of the IP datagram.
++       */
++      memcpy(skb2->transport_header, ptr, len);
++      left -= len;
++
++      /*
++       *    Fill in the new header fields.
++       */
++      iph = (struct iphdr *)skb2->network_header;
++      iph->frag_off = htons((offset >> 3));
++
++      /* ANK: dirty, but effective trick. Upgrade options only if
++       * the segment to be fragmented was THE FIRST (otherwise,
++       * options are already fixed) and make it ONCE
++       * on the initial skb, so that all the following fragments
++       * will inherit fixed options.
++       */
++
++      if (offset == 0)
++	ip_options_fragment(skb);
++
++      /*
++       *    Added AC : If we are fragmenting a fragment that's not the
++       *           last fragment then keep MF on each bit
++       */
++      if (left > 0 || not_last_frag)
++	iph->frag_off |= htons(IP_MF);
++      ptr += len;
++      offset += len;
++
++      /*
++       *    Put this fragment into the sending queue.
++       */
++
++      iph->tot_len = htons(len + hlen);
++
++      ip_send_check(iph);
++      /*
++       * send it
++       */
++      skb2->network_header = skb2->data;
++      l2_send_frame(skb2);
++
++    }
++  kfree_skb(skb);
++  return err;
++
++ fail:
++  kfree_skb(skb);
++  return err;
++}
++
++int mpls_ipip_output (struct sk_buff *skb)
++{
++  int ret = 1;
++                                                                                
++  if (mpls_output)
++  {
++    ret = mpls_output (&skb);
++  }
++                                                                                
++  if (ret < 0)
++    kfree_skb (skb);
++                                                                                
++  return ret;
++}
++
++
++int mpls_ip_output (struct sk_buff *skb)
++{
++  int ret = 1;
++
++  if (mpls_output)
++    ret = mpls_output (&skb);
++
++  if (ret == 1)
++  {
++    /* pass to ip */
++    ret = skb->dst->output (skb);
++  }
++  else if (ret < 0)
++    kfree_skb (skb);
++
++  return ret;
++}
++
++void mpls_register_output_hdlr (int (*fn) (struct sk_buff **skb))
++{
++  if (fn)
++    mpls_output = fn;
++}
++
++void mpls_unregister_output_hdlr ()
++{
++  mpls_output = NULL;
++}
++
++EXPORT_SYMBOL(mpls_fragment);
++EXPORT_SYMBOL(l2_send_frame);
++EXPORT_SYMBOL(mpls_register_output_hdlr);
++EXPORT_SYMBOL(mpls_unregister_output_hdlr);
++EXPORT_SYMBOL(mpls_ipip_output);
++
++
++
++
++/*
+  *	Generic function to send a packet as reply to another packet.
+  *	Used to send TCP resets so far. ICMP should use this function too.
+  *
+Index: net/ipv4/ipip.c
+===================================================================
+--- net/ipv4/ipip.c.orig
++++ net/ipv4/ipip.c
+@@ -400,7 +400,7 @@ static int ipip_tunnel_xmit(struct sk_bu
+ 	struct iphdr  *iph;			/* Our new IP header */
+ 	unsigned int max_headroom;		/* The extra header space needed */
+ 	__be32 dst = tiph->daddr;
+-	int    mtu;
++	int    mtu,ret;
+ 
+ 	if (tunnel->recursion++) {
+ 		stats->collisions++;
+@@ -521,9 +521,17 @@ static int ipip_tunnel_xmit(struct sk_bu
+ 
+ 	nf_reset(skb);
+ 
+-	IPTUNNEL_XMIT();
+-	tunnel->recursion--;
+-	return 0;
++  skb->ip_summed = CHECKSUM_NONE;
++  iph->tot_len = htons(skb->len);
++  ip_select_ident(iph, &rt->u.dst, NULL);
++  ip_send_check(iph);
++
++  ret = mpls_ipip_output (skb);
++  if (ret == 1)
++    IPTUNNEL_XMIT();
++  tunnel->recursion--;
++  return 0;
++
+ 
+ tx_error_icmp:
+ 	dst_link_failure(skb);
+Index: net/ipv4/tcp_ipv4.c
+===================================================================
+--- net/ipv4/tcp_ipv4.c.orig
++++ net/ipv4/tcp_ipv4.c
+@@ -80,6 +80,8 @@
+ #include <linux/crypto.h>
+ #include <linux/scatterlist.h>
+ 
++extern int (*mpls_output) (struct sk_buff *);
++
+ int sysctl_tcp_tw_reuse __read_mostly;
+ int sysctl_tcp_low_latency __read_mostly;
+ 
+@@ -543,7 +545,7 @@ static void tcp_v4_send_reset(struct soc
+ #ifdef CONFIG_TCP_MD5SIG
+ 	struct tcp_md5sig_key *key;
+ #endif
+-	struct net *net;
++	struct net *net = dev_net(skb->dst->dev);
+ 
+ 	/* Never send a reset in response to a reset. */
+ 	if (th->rst)
+@@ -592,7 +594,17 @@ static void tcp_v4_send_reset(struct soc
+ 				      sizeof(struct tcphdr), IPPROTO_TCP, 0);
+ 	arg.csumoffset = offsetof(struct tcphdr, check) / 2;
+ 
+-	net = dev_net(skb->dst->dev);
++	if (mpls_output)
++	  {
++	    skb->enable_mpls_fwd = 1;
++	    net->ipv4.tcp_sock->enable_mpls_fwd = 1;
++	  }
++	else
++	  {
++	    skb->enable_mpls_fwd = 0;
++	    net->ipv4.tcp_sock->enable_mpls_fwd = 0;
++	  }
++
+ 	ip_send_reply(net->ipv4.tcp_sock, skb,
+ 		      &arg, arg.iov[0].iov_len);
+ 
+@@ -724,6 +736,17 @@ static int __tcp_v4_send_synack(struct s
+ 					 csum_partial((char *)th, skb->len,
+ 						      skb->csum));
+ 
++    if (mpls_output)
++    {
++      skb->enable_mpls_fwd = 1;
++      sk->enable_mpls_fwd = 1;
++    }
++    else
++    {
++      skb->enable_mpls_fwd = 0;
++      sk->enable_mpls_fwd = 0;
++    }
++
+ 		err = ip_build_and_send_pkt(skb, sk, ireq->loc_addr,
+ 					    ireq->rmt_addr,
+ 					    ireq->opt);
+Index: net/ipv4/tcp_output.c
+===================================================================
+--- net/ipv4/tcp_output.c.orig
++++ net/ipv4/tcp_output.c
+@@ -39,6 +39,8 @@
+ #include <linux/compiler.h>
+ #include <linux/module.h>
+ 
++extern int (*mpls_output) (struct sk_buff *);
++
+ /* People can turn this off for buggy TCP's found in printers etc. */
+ int sysctl_tcp_retrans_collapse __read_mostly = 1;
+ 
+@@ -684,6 +686,17 @@ static int tcp_transmit_skb(struct sock 
+ 	if (skb->len != tcp_header_size)
+ 		tcp_event_data_sent(tp, skb, sk);
+ 
++
++	if (mpls_output)
++	  {
++	    skb->enable_mpls_fwd = 1;
++	  }
++	else
++	  {
++	    skb->enable_mpls_fwd = 0;
++	    
++	  }
++
+ 	if (after(tcb->end_seq, tp->snd_nxt) || tcb->seq == tcb->end_seq)
+ 		TCP_INC_STATS(sock_net(sk), TCP_MIB_OUTSEGS);
+ 
+Index: net/core/rtnetlink.c
+===================================================================
+--- net/core/rtnetlink.c.orig
++++ net/core/rtnetlink.c
+@@ -60,6 +60,7 @@ struct rtnl_link
+ };
+ 
+ static DEFINE_MUTEX(rtnl_mutex);
++EXPORT_SYMBOL(rtnl_mutex);
+ 
+ void rtnl_lock(void)
+ {
+Index: net/netlink/af_netlink.c
+===================================================================
+--- net/netlink/af_netlink.c.orig
++++ net/netlink/af_netlink.c
+@@ -724,6 +724,9 @@ static struct sock *netlink_getsockbypid
+ 	if (!sock)
+ 		return ERR_PTR(-ECONNREFUSED);
+ 
++	/* Bypassing the additional check below */
++	return sock;
++
+ 	/* Don't bother queuing skb if kernel socket has no input function */
+ 	nlk = nlk_sk(sock);
+ 	if (sock->sk_state == NETLINK_CONNECTED &&
+Index: net/core/fib_rules.c
+===================================================================
+--- net/core/fib_rules.c.orig
++++ net/core/fib_rules.c
+@@ -274,7 +274,7 @@ static int fib_nl_newrule(struct sk_buff
+ 	rule->flags = frh->flags;
+ 	rule->table = frh_get_table(frh, tb);
+ 
+-	if (!rule->pref && ops->default_pref)
++	if (!tb[FRA_PRIORITY] && ops->default_pref)
+ 		rule->pref = ops->default_pref(ops);
+ 
+ 	err = -EINVAL;
+Index: net/ipv4/fib_rules.c
+===================================================================
+--- net/ipv4/fib_rules.c.orig
++++ net/ipv4/fib_rules.c
+@@ -284,7 +284,7 @@ static int fib_default_rules_init(struct
+ {
+ 	int err;
+ 
+-	err = fib_default_rule_add(ops, 0, RT_TABLE_LOCAL, FIB_RULE_PERMANENT);
++	err = fib_default_rule_add(ops, 0, RT_TABLE_LOCAL, 0);
+ 	if (err < 0)
+ 		return err;
+ 	err = fib_default_rule_add(ops, 0x7FFE, RT_TABLE_MAIN, 0);
+Index: net/ipv6/fib6_rules.c
+===================================================================
+--- net/ipv6/fib6_rules.c.orig
++++ net/ipv6/fib6_rules.c
+@@ -276,7 +276,7 @@ static int fib6_rules_net_init(struct ne
+ 	INIT_LIST_HEAD(&net->ipv6.fib6_rules_ops->rules_list);
+ 
+ 	err = fib_default_rule_add(net->ipv6.fib6_rules_ops, 0,
+-				   RT6_TABLE_LOCAL, FIB_RULE_PERMANENT);
++				   RT6_TABLE_LOCAL, 0);
+ 	if (err)
+ 		goto out_fib6_rules_ops;
+ 
+
+*** include/linux/if_ether.h	Mon Mar 23 15:04:09 2009
+--- /usr/src/kernels/linux-ZebOS790-2.6.27.21/include/linux/if_ether.h	Fri Jul 22 13:25:48 2011
+***************
+*** 64,69 ****
+--- 64,70 ----
+  #define ETH_P_IPV6	0x86DD		/* IPv6 over bluebook		*/
+  #define ETH_P_PAUSE	0x8808		/* IEEE Pause frames. See 802.3 31B */
+  #define ETH_P_SLOW	0x8809		/* Slow Protocol. See 802.3ad 43B */
++ #define ETH_P_SPT	0x8809		/* Slow Protocol */
+  #define ETH_P_WCCP	0x883E		/* Web-cache coordination protocol
+  					 * defined in draft-wilson-wrec-wccp-v2-00.txt */
+  #define ETH_P_PPP_DISC	0x8863		/* PPPoE discovery messages     */
+***************
+*** 76,81 ****
+--- 77,85 ----
+  					 */
+  #define ETH_P_AOE	0x88A2		/* ATA over Ethernet		*/
+  #define ETH_P_TIPC	0x88CA		/* TIPC 			*/
++ #define ETH_P_PAE	0x888E		/* Slow Protocol Types          */
++ #define ETH_P_LLDP	0x88cc		/* LLDP Protocol Type           */
++ 
+  
+  /*
+   *	Non DIX types. Won't clash for 1500 types.
+
+*** include/linux/net.h	Mon Mar 23 15:04:09 2009
+--- /usr/src/kernels/linux-ZebOS790-2.6.27.21/include/linux/net.h	Fri Jul 22 13:25:48 2011
+***************
+*** 21,27 ****
+  #include <linux/socket.h>
+  #include <asm/socket.h>
+  
+! #define NPROTO		AF_MAX
+  
+  #define SYS_SOCKET	1		/* sys_socket(2)		*/
+  #define SYS_BIND	2		/* sys_bind(2)			*/
+--- 21,27 ----
+  #include <linux/socket.h>
+  #include <asm/socket.h>
+  
+! #define NPROTO		PF_MAX
+  
+  #define SYS_SOCKET	1		/* sys_socket(2)		*/
+  #define SYS_BIND	2		/* sys_bind(2)			*/
+
+*** include/linux/netdevice.h	Mon Mar 23 15:04:09 2009
+--- /usr/src/kernels/linux-ZebOS790-2.6.27.21/include/linux/netdevice.h	Fri Jul 22 13:25:48 2011
+***************
+*** 43,48 ****
+--- 43,58 ----
+  
+  #include <net/net_namespace.h>
+  
++ #if defined (CONFIG_IPIFWD) || defined (CONFIG_IPIFWD_MODULE)
++ extern void register_ipi_handle_frame_hook(int (*func)(struct sk_buff *skb));
++ extern void unregister_ipi_handle_frame_hook(void);
++ #endif /* CONFIG_IPIFWD || CONFIG_IPIFWD_MODULE */
++ 
++ #if defined (CONFIG_LACP) || defined (CONFIG_LACP_MODULE)
++ extern void register_lacp_handle_frame_hook(void (*func)(struct sk_buff *skb));
++ extern void unregister_lacp_handle_frame_hook(void);
++ #endif /* CONFIG_LACP || CONFIG_LACP_MODULE */
++ 
+  struct vlan_group;
+  struct ethtool_ops;
+  struct netpoll_info;
+*************** struct net_device
+*** 710,715 ****
+--- 720,726 ----
+  						    unsigned short vid);
+  
+  	int			(*neigh_setup)(struct net_device *dev, struct neigh_parms *);
++         int                     (*rx_hook)(struct sk_buff *skb);
+  #ifdef CONFIG_NETPOLL
+  	struct netpoll_info	*npinfo;
+  #endif
+*************** struct net_device
+*** 730,735 ****
+--- 741,755 ----
+  
+  	/* bridge stuff */
+  	struct net_bridge_port	*br_port;
++ 
++ #if defined (CONFIG_IPIFWD) || defined (CONFIG_IPIFWD_MODULE)
++         void *ipi_fwd_port;
++ #endif /* CONFIG_IPIFWD || CONFIG_IPIFWD_MODULE */
++ 
++ #if defined (CONFIG_LACP) || defined (CONFIG_LACP_MODULE)
++           struct net_device *agg_dev;
++ #endif /* CONFIG_LACP || CONFIG_LACP_MODULE */
++   
+  	/* macvlan */
+  	struct macvlan_port	*macvlan_port;
+  	/* GARP */
+
+*** include/linux/socket.h	Mon Mar 23 15:04:09 2009
+--- /usr/src/kernels/linux-ZebOS790-2.6.27.21/include/linux/socket.h	Fri Jul 22 13:25:48 2011
+*************** struct ucred {
+*** 190,196 ****
+  #define AF_IUCV		32	/* IUCV sockets			*/
+  #define AF_RXRPC	33	/* RxRPC sockets 		*/
+  #define AF_ISDN		34	/* mISDN sockets 		*/
+! #define AF_MAX		35	/* For now.. */
+  
+  /* Protocol families, same as address families. */
+  #define PF_UNSPEC	AF_UNSPEC
+--- 190,208 ----
+  #define AF_IUCV		32	/* IUCV sockets			*/
+  #define AF_RXRPC	33	/* RxRPC sockets 		*/
+  #define AF_ISDN		34	/* mISDN sockets 		*/
+! #define AF_LACP         40      /* IPI 802.3 LACP              */
+! #define AF_EAPOL        41      /* IPI 802.1x PAE               */
+! #define AF_STP          42      /* IPI 802.1D STP               */
+! #define AF_HAL          43      /* IPI 802.1D HAL               */
+! #define AF_GARP         44      /* IPI 802.1D GARP              */
+! #define AF_IGMP_SNOOP   45      /* IPI IGMP SNOOPING            */
+! #define AF_LLDP         47      /* IPI IEEE 802.1AB 2005 LLDP   */
+! #define AF_CFM          49      /* IPI IEEE802-1ag-d6-0         */
+! #define AF_EFM          50      /* IPI IEEE802.3ah EFM OAM      */
+! #define AF_ELMI		51	/* IPI MEF-16			*/
+! #define AF_TRILL        52      /* IPI TRILL L2ISIS             */
+! #define AF_PTP          53      /* IPI PTP                      */
+! #define AF_MAX          64      /* For now.. */
+  
+  /* Protocol families, same as address families. */
+  #define PF_UNSPEC	AF_UNSPEC
+*************** struct ucred {
+*** 227,232 ****
+--- 239,256 ----
+  #define PF_IUCV		AF_IUCV
+  #define PF_RXRPC	AF_RXRPC
+  #define PF_ISDN		AF_ISDN
++ #define PF_LACP         AF_LACP
++ #define PF_EAPOL        AF_EAPOL
++ #define PF_STP          AF_STP
++ #define PF_HAL          AF_HAL
++ #define PF_GARP         AF_GARP
++ #define PF_IGMP_SNOOP   AF_IGMP_SNOOP
++ #define PF_LLDP         AF_LLDP
++ #define PF_EFM          AF_EFM
++ #define PF_CFM          AF_CFM
++ #define PF_ELMI		AF_ELMI
++ #define PF_TRILL	AF_TRILL
++ #define PF_PTP		AF_PTP
+  #define PF_MAX		AF_MAX
+  
+  /* Maximum queue length specifiable by listen.  */
+
+*** net/Kconfig	Mon Mar 23 15:04:09 2009
+--- /usr/src/kernels/linux-ZebOS790-2.6.27.21/net/Kconfig	Fri Jul 22 13:25:48 2011
+*************** config NET_NS
+*** 32,37 ****
+--- 32,57 ----
+  	  Allow user space to create what appear to be multiple instances
+  	  of the network stack.
+  
++ config IPIFWD
++         tristate "IPInfusion Vlan-Aware Bridge Forwarder"
++ 	default m
++         help 
++ 
++ config 8021X
++         tristate "IPInfusion 802.1x Port Authentication Entity"
++ 	default m
++         help
++ 
++ config LACP
++         tristate "IPInfusion Link Aggregation Control Protocol"
++ 	default m
++         help
++ 
++ config LLDP
++         tristate "IPI Link Layer Discovery Protocol"
++ 	default m
++         help
++ 
+  source "net/packet/Kconfig"
+  source "net/unix/Kconfig"
+  source "net/xfrm/Kconfig"
+
+*** net/core/dev.c	Mon Mar 23 15:04:09 2009
+--- /usr/src/kernels/linux-ZebOS790-2.6.27.21/net/core/dev.c	Fri Jul 22 13:25:48 2011
+*************** int netif_rx(struct sk_buff *skb)
+*** 1912,1917 ****
+--- 1912,1926 ----
+  	 * short when CPU is congested, but is still operating.
+  	 */
+  	local_irq_save(flags);
++ 
++         if (unlikely(skb->dev->rx_hook != NULL)) {
++                 int ret;
++ 
++                 ret = skb->dev->rx_hook(skb);
++                 if (ret == NET_RX_DROP)
++                         goto drop;
++         }
++ 
+  	queue = &__get_cpu_var(softnet_data);
+  
+  	__get_cpu_var(netdev_rx_stat).total++;
+*************** enqueue:
+*** 1923,1932 ****
+--- 1932,1949 ----
+  			return NET_RX_SUCCESS;
+  		}
+  
++         if (unlikely(skb->dev->rx_hook != NULL)) {
++ 	  int ret;
++ 	  ret = skb->dev->rx_hook(skb);
++ 	  if (ret == NET_RX_DROP)
++ 	    goto drop;
++         }
++ 
+  		napi_schedule(&queue->backlog);
+  		goto enqueue;
+  	}
+  
++ drop:
+  	__get_cpu_var(netdev_rx_stat).dropped++;
+  	local_irq_restore(flags);
+  
+*************** int netif_rx_ni(struct sk_buff *skb)
+*** 1949,1954 ****
+--- 1966,2015 ----
+  
+  EXPORT_SYMBOL(netif_rx_ni);
+  
++ /* Deliver skb to an old protocol, which is not threaded well
++    or which do not understand shared skbs.
++ */
++ static int deliver_to_old_ones(struct packet_type *pt, struct sk_buff *skb, int last, struct net_device *dev)
++ {
++         static spinlock_t net_bh_lock = SPIN_LOCK_UNLOCKED;
++         int ret = NET_RX_DROP;
++ 
++ 
++         if (!last) {
++                 skb = skb_clone(skb, GFP_ATOMIC);
++                 if (skb == NULL)
++                         return ret;
++         }
++         if (skb_is_nonlinear(skb) && skb_linearize(skb) != 0) {
++                 kfree_skb(skb);
++                 return ret;
++         }
++ 
++         /* The assumption (correct one) is that old protocols
++            did not depened on BHs different of NET_BH and TIMER_BH.
++          */
++ 
++         /* Emulate NET_BH with special spinlock */
++         spin_lock(&net_bh_lock);
++ 
++         /* Disable timers and wait for all timers completion */
++         /*
++         tasklet_disable(bh_task_vec+TIMER_BH);
++         */
++ 
++         ret = pt->func(skb, skb->dev, pt, dev);
++ 
++         /*
++         tasklet_hi_enable(bh_task_vec+TIMER_BH);
++         */
++ 
++         spin_unlock(&net_bh_lock);
++ 
++ /* printk ("net_bh_locknet_bh_locknet_bh_locknet_bh_locknet_bh_lock\n"); */
++ 
++         return ret;
++ }
++  
+  static void net_tx_action(struct softirq_action *h)
+  {
+  	struct softnet_data *sd = &__get_cpu_var(softnet_data);
+*************** static inline struct sk_buff *handle_mac
+*** 2069,2074 ****
+--- 2130,2208 ----
+  #define handle_macvlan(skb, pt_prev, ret, orig_dev)	(skb)
+  #endif
+  
++ #if defined(CONFIG_IPIFWD) || defined(CONFIG_IPIFWD_MODULE)
++ int (*ipi_handle_frame_hook)(struct sk_buff *skb) = NULL;
++ 
++ void register_ipi_handle_frame_hook(int (*func)(struct sk_buff *skb))
++ {
++   if (func)
++     ipi_handle_frame_hook = func;
++ }
++ 
++ void unregister_ipi_handle_frame_hook(void)
++ {
++   ipi_handle_frame_hook = NULL;
++ }
++ 
++ EXPORT_SYMBOL(register_ipi_handle_frame_hook);
++ EXPORT_SYMBOL(unregister_ipi_handle_frame_hook);
++ #endif /* CONFIG_IPIFWD || CONFIG_IPIFWD_MODULE */
++ 
++ #if defined(CONFIG_LACP) || defined(CONFIG_LACP_MODULE)
++ void (*lacp_handle_frame_hook)(struct sk_buff *skb) = NULL;
++ 
++ void register_lacp_handle_frame_hook(void (*func)(struct sk_buff *skb))
++ {
++   if (func)
++     lacp_handle_frame_hook = func;
++ }
++ 
++ void unregister_lacp_handle_frame_hook(void)
++ {
++   lacp_handle_frame_hook = NULL;
++ }
++ 
++ EXPORT_SYMBOL(register_lacp_handle_frame_hook);
++ EXPORT_SYMBOL(unregister_lacp_handle_frame_hook);
++ #endif /* CONFIG_LACP || CONFIG_LACP_MODULE */
++ 
++ #if defined(CONFIG_LLDP) || defined(CONFIG_LLDP_MODULE)
++ void (*lldp_handle_frame_hook)(struct sk_buff *skb) = NULL;
++ 
++ void register_lldp_handle_frame_hook(void (*func)(struct sk_buff *skb))
++ {
++   if (func)
++     lldp_handle_frame_hook = func;
++ }
++ 
++ void unregister_lldp_handle_frame_hook(void)
++ {
++   lldp_handle_frame_hook = NULL;
++ }
++ 
++ EXPORT_SYMBOL(register_lldp_handle_frame_hook);
++ EXPORT_SYMBOL(unregister_lldp_handle_frame_hook);
++ #endif /* CONFIG_LLDP || CONFIG_LLDP_MODULE */
++ 
++ static __inline__ int ipi_handle_bridge_frame (struct sk_buff *skb,
++                                      struct packet_type *pt_prev,
++                                      struct net_device *dev)
++ {
++         int ret = NET_RX_DROP;
++ 
++         if (pt_prev) {
++                 if (!pt_prev->af_packet_priv)
++                         ret = deliver_to_old_ones(pt_prev, skb, 0, dev);
++                 else {
++                         atomic_inc(&skb->users); 
++                         ret = pt_prev->func(skb, skb->dev, pt_prev, dev);
++                 }
++         }
++ 
++         ret = ipi_handle_frame_hook(skb);
++         return ret;
++ }
++ 
+  #ifdef CONFIG_NET_CLS_ACT
+  /* TODO: Maybe we should just force sch_ingress to be compiled in
+   * when CONFIG_NET_CLS_ACT is? otherwise some useless instructions
+*************** int netif_receive_skb(struct sk_buff *sk
+*** 2187,2192 ****
+--- 2321,2333 ----
+  	int ret = NET_RX_DROP;
+  	__be16 type;
+  
++         struct ethhdr * ethhdr = (struct ethhdr *)skb->mac_header;
++         unsigned char *dest_addr = (unsigned char *)(ethhdr->h_dest);
++         const unsigned char eapol_addr[6] = { 0x01, 0x80, 0xc2,
++                                               0x00, 0x00, 0x03 };
++         const unsigned char lldp_addr[6] = { 0x01, 0x80, 0xc2,
++                                              0x00, 0x00, 0x0e };
++   
+  	if (skb->vlan_tci && vlan_hwaccel_do_receive(skb))
+  		return NET_RX_SUCCESS;
+  
+*************** int netif_receive_skb(struct sk_buff *sk
+*** 2200,2205 ****
+--- 2341,2352 ----
+  	if (!skb->iif)
+  		skb->iif = skb->dev->ifindex;
+  
++ 	if (unlikely(skb->dev->rx_hook != NULL)) {
++ 	  ret = skb->dev->rx_hook(skb);
++ 	  if (ret == NET_RX_DROP)
++ 	    goto out;
++ 	}
++ 
+  	null_or_orig = NULL;
+  	orig_dev = skb->dev;
+  	if (orig_dev->master) {
+*************** int netif_receive_skb(struct sk_buff *sk
+*** 2215,2220 ****
+--- 2362,2394 ----
+  	skb_reset_transport_header(skb);
+  	skb->mac_len = skb->network_header - skb->mac_header;
+  
++         type = skb->protocol;
++ 
++ #if defined(CONFIG_LLDP) || defined (CONFIG_LLDP_MODULE)
++   if ((type == __constant_htons (ETH_P_LLDP)) &&
++       (!memcmp (dest_addr, lldp_addr, 6)))
++     {
++       if (lldp_handle_frame_hook)
++         lldp_handle_frame_hook (skb);
++     }
++ #endif /* CONFIG_LLDP || CONFIG_LLDP_MODULE */
++ 
++ #if defined(CONFIG_LACP) || defined (CONFIG_LACP_MODULE)
++   if (skb->dev->agg_dev && type != __constant_htons (ETH_P_SPT))
++     {
++       /* Slow protocol types currently handled by agg_dev.
++          Currently defined Slow protocol subtypes are LACP and
++          Link Aggregation - Marker Protocol */
++       skb->dev = skb->dev->agg_dev;
++       lacp_handle_frame_hook (skb);
++ 
++       if (skb->pkt_type == PACKET_OTHERHOST &&
++           memcmp (ethhdr->h_dest, skb->dev->dev_addr,
++           skb->dev->addr_len) == 0)
++         skb->pkt_type = PACKET_HOST;
++     }
++ #endif
++ 
+  	pt_prev = NULL;
+  
+  	rcu_read_lock();
+*************** int netif_receive_skb(struct sk_buff *sk
+*** 2231,2243 ****
+  #endif
+  
+  	list_for_each_entry_rcu(ptype, &ptype_all, list) {
+! 		if (ptype->dev == null_or_orig || ptype->dev == skb->dev ||
+! 		    ptype->dev == orig_dev) {
+! 			if (pt_prev)
+! 				ret = deliver_skb(skb, pt_prev, orig_dev);
+! 			pt_prev = ptype;
+! 		}
+! 	}
+  
+  #ifdef CONFIG_NET_CLS_ACT
+  	skb = handle_ing(skb, &pt_prev, &ret, orig_dev);
+--- 2405,2455 ----
+  #endif
+  
+  	list_for_each_entry_rcu(ptype, &ptype_all, list) {
+! 	  if (ptype->dev == null_or_orig || ptype->dev == skb->dev ||
+! 	      ptype->dev == orig_dev) {
+! 	    if (pt_prev) {
+! 	      if (!pt_prev->af_packet_priv) {
+! 		ret = deliver_to_old_ones
+! 		  (pt_prev, skb, 0, orig_dev);
+! 	      } else {
+! 		atomic_inc(&skb->users);
+! 		ret = pt_prev->func
+! 		  (skb, skb->dev,
+! 		   pt_prev, orig_dev);
+! 	      }
+! 	    }
+! 	    pt_prev = ptype;
+! 	  }
+! 	}
+! 
+! #if defined(CONFIG_IPIFWD) || defined(CONFIG_IPIFWD_MODULE)
+!         if ((rcu_dereference (skb->dev->ipi_fwd_port)) != NULL &&
+! #if defined(CONFIG_LACP) || defined (CONFIG_LACP_MODULE)
+!             type != __constant_htons (ETH_P_SPT) &&
+! #endif
+! #if defined(CONFIG_8021X) || defined (CONFIG_8021X_MODULE)
+!             type != __constant_htons (ETH_P_PAE) &&
+! /* If received type is 8021Q but destined for 8021X group address handle it*/
+!           ( !((type == __constant_htons (ETH_P_8021Q)) &&
+!              (!memcmp (dest_addr, eapol_addr, 6))))&&
+! #endif
+!             ipi_handle_frame_hook != NULL)
+!           {
+! 	    rcu_read_unlock();
+!             ret = ipi_handle_bridge_frame(skb, pt_prev, orig_dev);
+!             return ret;
+!           }
+! #endif
+! 
+! #if defined(CONFIG_8021X) || defined (CONFIG_8021X_MODULE)
+!  /* If 8021Q frame received but for 8021X group address change the type */
+!        if ((type == __constant_htons (ETH_P_8021Q)) &&
+!              (!memcmp (dest_addr, eapol_addr, 6)))
+!          {
+!              type = __constant_htons (ETH_P_PAE);
+!          }
+! #endif
+! 
+  
+  #ifdef CONFIG_NET_CLS_ACT
+  	skb = handle_ing(skb, &pt_prev, &ret, orig_dev);
+*************** ncls:
+*** 2259,2267 ****
+  		if (ptype->type == type &&
+  		    (ptype->dev == null_or_orig || ptype->dev == skb->dev ||
+  		     ptype->dev == orig_dev)) {
+! 			if (pt_prev)
+! 				ret = deliver_skb(skb, pt_prev, orig_dev);
+! 			pt_prev = ptype;
+  		}
+  	}
+  
+--- 2471,2488 ----
+  		if (ptype->type == type &&
+  		    (ptype->dev == null_or_orig || ptype->dev == skb->dev ||
+  		     ptype->dev == orig_dev)) {
+! 		  if (pt_prev) {
+! 		    if (!pt_prev->af_packet_priv) {
+! 		      ret = deliver_to_old_ones
+! 			(pt_prev, skb, 0, orig_dev);
+! 		    } else {
+! 		      atomic_inc(&skb->users);
+! 		      ret = pt_prev->func
+! 			(skb, skb->dev,
+! 			 pt_prev, orig_dev);
+! 		    }	
+! 		  }
+! 		  pt_prev = ptype;
+  		}
+  	}
+  

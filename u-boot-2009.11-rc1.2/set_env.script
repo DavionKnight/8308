@@ -1,0 +1,56 @@
+
+echo ---------------------------------------------------------------
+echo set variables
+echo ---------------------------------------------------------------
+
+set kernel_img a95000
+set dnu 'tftp 3000000 u-boot-nand.bin; nand erase 0 0x80000; nand write 3000000 0 0x80000'
+set dnk 'tftp 0x3000000 kernel.img; ubi part ubifs; ubi write 0x3000000 kernel $kernel_img'
+
+set addip 'set bootargs ${bootargs} ip=${ipaddr}:${serverip}:${gatewayip}:${netmask}:${hostname}::off'
+set rootpath /home/;
+set hostname KF151
+
+set ramargs 'set bootargs console=${consoledev},${baudrate} root=/dev/ram rw'
+
+set nfsargs 'set bootargs console=${consoledev},${baudrate} root=/dev/nfs rw nfsroot=${serverip}:${rootpath}'
+set nfsr 'run nfsargs addip; tftp $loadaddr edd_uImage; tftp $fdtaddr edd.dtb; bootm $loadaddr - $fdtaddr'
+set nfs 'run nfsargs addip; nand read $loadaddr ${kernel_addr} ${kernel_size}; nand read $fdtaddr ${fdt_addr} ${fdt_size}; bootm $loadaddr - $fdtaddr'
+
+set flargs 'set bootargs console=${consoledev},${baudrate} root=ubi0!root rootfstype=ubifs ubi.mtd=6 rw'
+set utr 'run flargs addip; tftp $loadaddr edd_uImage; tftp $fdtaddr edd.dtb; bootm $loadaddr - $fdtaddr'
+set ut 'run flargs addip; nand read $loadaddr ${kernel_addr} ${kernel_size}; nand read $fdtaddr ${fdt_addr} ${fdt_size}; bootm $loadaddr - $fdtaddr'
+
+set rtr 'run ramargs addip; tftp $ramdiskaddr edd_uRamdisk; tftp $loadaddr edd_uImage; tftp $fdtaddr edd.dtb; bootm $loadaddr $ramdiskaddr $fdtaddr'
+set rt 'run ramargs addip; ubi part ubifs; ubifsmount kernel; ubifsload $loadaddr edd_uImage; ubifsload $ramdiskaddr edd_uRamdisk; ubifsload $fdtaddr edd.dtb; bootm $loadaddr $ramdiskaddr $fdtaddr'
+
+set bootcmd 'run rt'
+
+echo ---------------------------------------------------------------
+echo set mtdparts
+echo ---------------------------------------------------------------
+mtdparts default
+saveenv
+
+echo ---------------------------------------------------------------
+echo set UBI partition
+echo ---------------------------------------------------------------
+nand erase ubifs
+ubi part ubifs
+
+echo ---------------------------------------------------------------
+echo create UBI volumes
+echo ---------------------------------------------------------------
+ubi create kernel 24EA000
+ubi create application 1EC30000
+
+echo ---------------------------------------------------------------
+echo write image to UBI volumes
+echo ---------------------------------------------------------------
+tftp 0x3000000 kernel.img
+ubi write 0x3000000 kernel $kernel_img
+
+echo ---------------------------------------------------------------
+echo reset the u-boot
+echo ---------------------------------------------------------------
+reset

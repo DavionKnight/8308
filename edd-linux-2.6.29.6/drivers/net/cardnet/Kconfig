@@ -1,0 +1,36 @@
+#
+# Boardnet configuration
+#
+
+menu "MPC83xx PCI agent mode driver"
+	depends on NETDEVICES && !PCI
+
+config CARDNET
+	tristate "Cardnet driver support"
+	---help---
+	  cardnet driver is a simulating ethernet driver for MPC83xxEMDS
+	  board when it acts as PCI agent device.
+	  If MPC83xxEMDS board acts as PCI agent and want to communicate
+	  with the host through PCI interface, enable this cardnet driver
+	  and there will be an ethernet device named cethx in the system.
+	  Corporating with another ethernet device named bethx in the host
+	  system, the host and agent can send package to each other.
+
+endmenu
+
+menu "MPC83xx board PCI demo driver"
+	depends on NETDEVICES && PCI
+
+config BOARDNET
+	tristate "Boardnet driver support"
+	---help---
+	  Boardnet driver is a simulate ethernet driver for MPC8360E PB
+	  board when it acts as PCI agent device and plused into MPC8360E PB board.
+	  If MPC8349E MDS board acts as PCI host and want to communicate
+	  with MPC8360E PB (agent) through PCI interface,enable this
+	  boardnet driver and there will be an ethernet device named
+	  bethx in the system.
+	  Corporating with another ethernet device named cethx in the
+	  agent system,the host and agent can send package to each other.
+
+endmenu

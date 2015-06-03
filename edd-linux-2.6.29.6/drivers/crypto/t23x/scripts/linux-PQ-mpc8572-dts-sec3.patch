@@ -1,0 +1,24 @@
+diff -purN linux-2.6.21-whitefin/arch/powerpc/boot/dts/mpc8572ds.dts linux-2.6.21-8572/arch/powerpc/boot/dts/mpc8572ds.dts
+--- linux-2.6.21-whitefin/arch/powerpc/boot/dts/mpc8572ds.dts	2007-07-13 15:56:44.000000000 -0700
++++ linux-2.6.21-8572/arch/powerpc/boot/dts/mpc8572ds.dts	2007-11-02 14:34:19.000000000 -0700
+@@ -175,6 +175,20 @@
+ 			interrupt-parent = <&mpic>;
+ 		};
+ 
++		crypto@30000 {
++			device_type = "crypto";
++			model = "SEC3";
++			compatible = "talitos";
++			reg = <30000 10000>;
++			interrupts = <2d 2 3a 2>;
++			interrupt-parent = <&mpic>;
++			/* Rev. 3.0 geometry */
++			num-channels = <4>;
++			channel-fifo-len = <18>;
++			exec-units-mask = <000009fe>;
++			descriptor-types-mask = <03ab0ebf>;
++		};
++
+                 // 8572 PEX3 Controller: PEX x 2, ULI M1575
+ 		pci@8000 {
+ 			compatible = "85xx";

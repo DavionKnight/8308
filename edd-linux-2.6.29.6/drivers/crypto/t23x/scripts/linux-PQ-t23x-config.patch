@@ -1,0 +1,59 @@
+diff -puN linux-2.6.21-whitefin/drivers/crypto/Kconfig linux-2.6.21-8572/drivers/crypto/Kconfig
+--- linux-2.6.21-whitefin/drivers/crypto/Kconfig	2007-04-25 20:08:32.000000000 -0700
++++ linux-2.6.21-8572/drivers/crypto/Kconfig	2007-11-02 14:34:42.000000000 -0700
+@@ -10,7 +10,7 @@ config CRYPTO_DEV_PADLOCK
+ 	  (so called VIA PadLock ACE, Advanced Cryptography Engine)
+ 	  that provides instructions for very fast cryptographic
+ 	  operations with supported algorithms.
+-	  
++
+ 	  The instructions are used only when the CPU supports them.
+ 	  Otherwise software encryption is used.
+ 
+@@ -66,4 +66,34 @@ config CRYPTO_DEV_GEODE
+ 	  To compile this driver as a module, choose M here: the module
+ 	  will be called geode-aes.
+ 
++
++config CRYPTO_DEV_EXTENS_T23X
++	tristate "Extensible Driver (t23x) for Talitos 2.x/3.x (EXPERIMENTAL)"
++# dependency selection here is subjective, CRYPTO not yet
++# valid unless API interface exists. Subsystem is dependent on
++# PQ 2/3 "E" series processors with the crypto core, thus this
++# dependency list is the best selector we have.
++        depends on PPC_83xx || PPC_85xx || PPC_86xx
++        default m
++        help
++          Extensible Crypto Driver for PowerQUICC devices containing the
++          SEC 2.x/3.x accelerator core.
++
++          Builds the Resource Manager component (t23xrm), which manages
++          the hardware and enables sharing between APIs
++
++config CRYPTO_DEV_EXTENS_T23X_RMTEST
++        tristate "t23x Resource Manager testing module (EXPERIMENTAL)"
++        depends on CRYPTO_DEV_EXTENS_T23X
++        help
++          Test module (t23xtest) to verify installation of t23x Resource
++          Manager and accelerator hardware under it's control
++
++config CRYPTO_DEV_EXTENS_T23X_SEC2
++        tristate "t23x SEC2 Legacy Device Interface (EXPERIMENTAL)"
++        depends on CRYPTO_DEV_EXTENS_T23X
++        help
++          SEC2 Legacy Driver Interface (t23xsec2) component intended to
++          allow migration of applications dependent on the legacy driver
++
+ endmenu
+diff -puN linux-2.6.21-whitefin/drivers/crypto/Makefile linux-2.6.21-8572/drivers/crypto/Makefile
+--- linux-2.6.21-whitefin/drivers/crypto/Makefile	2007-04-25 20:08:32.000000000 -0700
++++ linux-2.6.21-8572/drivers/crypto/Makefile	2007-11-02 14:34:42.000000000 -0700
+@@ -2,3 +2,7 @@ obj-$(CONFIG_CRYPTO_DEV_PADLOCK) += padl
+ obj-$(CONFIG_CRYPTO_DEV_PADLOCK_AES) += padlock-aes.o
+ obj-$(CONFIG_CRYPTO_DEV_PADLOCK_SHA) += padlock-sha.o
+ obj-$(CONFIG_CRYPTO_DEV_GEODE) += geode-aes.o
++
++obj-$(CONFIG_CRYPTO_DEV_EXTENS_T23X) += t23x/t23xrm/
++obj-$(CONFIG_CRYPTO_DEV_EXTENS_T23X_RMTEST) += t23x/t23xtest/
++obj-$(CONFIG_CRYPTO_DEV_EXTENS_T23X_SEC2) += t23x/t23xsec2/
+Common subdirectories: linux-2.6.21-whitefin/drivers/crypto/t23x and linux-2.6.21-8572/drivers/crypto/t23x

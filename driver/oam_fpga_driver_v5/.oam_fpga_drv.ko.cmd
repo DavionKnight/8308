@@ -1,0 +1,1 @@
+cmd_/home/freddie/Documents/HX/driver/oam_fpga_driver_v5/oam_fpga_drv.ko := ppc_82xx-ld -m elf32ppc -r   arch/powerpc/lib/crtsavres.o  -o /home/freddie/Documents/HX/driver/oam_fpga_driver_v5/oam_fpga_drv.ko /home/freddie/Documents/HX/driver/oam_fpga_driver_v5/oam_fpga_drv.o /home/freddie/Documents/HX/driver/oam_fpga_driver_v5/oam_fpga_drv.mod.o

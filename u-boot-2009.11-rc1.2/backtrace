@@ -1,0 +1,70 @@
+#!/usr/bin/perl -w
+
+my $mapfile = shift || ( (-r 'System.map')
+			 ? 'System.map'
+			 : '/LinuxPPC/usr/src/linux/System.map' );
+
+print STDERR "Reading symbols from $mapfile\n";
+
+my $reloc = eval (shift || 0);
+
+printf STDERR "Using Address Offset 0x%08lx\n", $reloc;
+
+#
+# Read symbol table
+#
+open (MAP, $mapfile) or die "Can't open $mapfile: $!\n";
+
+my $cnt = 0;
+
+while (<MAP>) {
+	chomp;
+	my ($a,$t,$n) = split;
+	$a = eval ('0x' . $a);
+	if (($t =~ /^t$/i)	|| 
+	    ($n eq '_etext')	||
+	    ($n eq '_erotext')	||
+	    ($n eq '_end')	) {
+		$addr[$cnt] = $a;
+		$name[$cnt] = $n;
+		++$cnt;
+	}
+}
+close MAP;
+
+my ($i, $n, $last);
+
+#for ($i=0; $i<$cnt; ++$i) {
+#	printf "0x%08x  %s\n", $addr[$i], $name[$i];
+#}
+
+#
+# Now get backtrace info from stdin
+#
+
+while (<>) {
+	chomp;
+	my @a = split;
+	my $aa;
+
+	for ($i=0; $i<=$#a; ++$i) {
+		$aa = eval ('0x' . $a[$i]) + $reloc;
+
+		$last = -1;
+		for ($n=0; $n<$cnt; ++$n) {
+			if ($addr[$n] > $aa) {
+				last;
+			}
+			$last = $n;
+		}
+
+		if ($last >= 0) {
+			my $offset = $aa - $addr[$last];
+
+			printf "0x%08x -- 0x%08x + 0x%04x   %s\n",
+				$aa, $addr[$last], $offset, $name[$last];
+		} else {
+			printf "0x%08x -- unknown address\n", $aa;
+		}
+	}
+}

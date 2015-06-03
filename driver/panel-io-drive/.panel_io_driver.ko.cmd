@@ -1,0 +1,1 @@
+cmd_/home/freddie/Documents/HX/driver/panel-io-drive/panel_io_driver.ko := ppc_82xx-ld -m elf32ppc -r   arch/powerpc/lib/crtsavres.o  -o /home/freddie/Documents/HX/driver/panel-io-drive/panel_io_driver.ko /home/freddie/Documents/HX/driver/panel-io-drive/panel_io_driver.o /home/freddie/Documents/HX/driver/panel-io-drive/panel_io_driver.mod.o
