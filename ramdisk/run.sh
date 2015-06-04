@@ -1,6 +1,6 @@
 #!/bin/sh
 
-export PATH=/home/freddie/Compiler_PowerPC/usr/bin:/home/freddie/Compiler_PowerPC/bin:$PATH
+export PATH=/opt/eldk42/usr/bin:/opt/eldk42/bin:$PATH
 rm *.gz
 cp ramdisk_tmp ramdisk
 gzip -f9 ramdisk

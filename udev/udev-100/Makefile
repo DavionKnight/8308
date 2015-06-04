@@ -107,7 +107,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_SCRIPT = ${INSTALL_PROGRAM}
 PWD = $(shell pwd)
 
-CROSS_COMPILE ?=ppc_82xx-
+CROSS_COMPILE ?=/opt/eldk42/usr/bin/ppc_82xx-
 CC = $(CROSS_COMPILE)gcc
 LD = $(CROSS_COMPILE)gcc
 AR = $(CROSS_COMPILE)ar

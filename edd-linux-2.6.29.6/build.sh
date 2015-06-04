@@ -1,7 +1,7 @@
 #!/bin/sh
 export ARCH=powerpc
 #make menuconfig
-export PATH=/home/freddie/Compiler_PowerPC/usr/bin:/home/freddie/Compiler_PowerPC/bin:$PATH
+export PATH=/opt/eldk42/usr/bin:/opt/eldk42/bin:$PATH
 export CROSS_COMPILE=ppc_82xx-
 
 #make distclean
