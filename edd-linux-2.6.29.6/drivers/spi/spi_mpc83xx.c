@@ -133,7 +133,7 @@ struct spi_mpc83xx_cs {
 #define GPIO_ODR		0x04
 #define GPIO_DAT		0x08
 
-#define SLAVE_SWITCH      4
+#define SLAVE_SWITCH      1
 #define SLAVE_EPCS		9
 
 static void __iomem *immap;
@@ -148,7 +148,7 @@ static void switch_cs_enable(u8 cs, u8 polarity)
 {
 	if(immap)
 	{
-		clrbits32(immap, mpc8xxx_gpio2mask(SLAVE_SWITCH));
+		clrbits32(immap+0xc00+ GPIO_DAT, mpc8xxx_gpio2mask(SLAVE_SWITCH));
 	}
 	else
 		printk("\n the immap has not inita \n");
@@ -159,7 +159,7 @@ static void switch_cs_disable(u8 cs, u8 polarity)
 {
 	if(immap)
 	{
-		setbits32(immap, mpc8xxx_gpio2mask(SLAVE_SWITCH));
+		setbits32(immap+0xc00+ GPIO_DAT, mpc8xxx_gpio2mask(SLAVE_SWITCH));
 	}
 	else
 		printk("\n the immap has not inita \n");
@@ -193,9 +193,9 @@ static void chip_sel_pin_init(void)
 		//clrbits32(immap +0xc00+ GPIO_DAT, d);
 		setbits32(immap +0xc00+ GPIO_DAT, d);
 
-		d = mpc8xxx_gpio2mask(SLAVE_EPCS);//epcs disable
-		setbits32(immap + 0xc00+GPIO_DIR, d);
-		setbits32(immap + 0xc00+ GPIO_DAT, d);
+//		d = mpc8xxx_gpio2mask(SLAVE_EPCS);//epcs disable
+//		setbits32(immap + 0xc00+GPIO_DIR, d);
+//		setbits32(immap + 0xc00+ GPIO_DAT, d);
 
 		printk("\n the date is %x. \n",in_be32(immap +0xc00+ GPIO_DAT) );
 	}
