@@ -362,7 +362,7 @@ int fpga_spi_read(u16 addr, u16 size, u16 *data_buf)
 	spi_message_add_tail(k_xfers, &msg);
 
 	spi->chip_select = 0;
-	spi->mode = BCM_SPI_WORK_MODE;
+	spi->mode = 1;
 	status = spi_setup(spi);
 	if (status < 0)
 		goto done;
@@ -427,7 +427,7 @@ int fpga_spi_write(u16 addr, u16 size, u16 *data_buf)
 	spi_message_add_tail(k_xfers, &msg);
 
 	spi->chip_select = 0;
-	spi->mode = BCM_SPI_WORK_MODE;
+	spi->mode = 1;
 	status = spi_setup(spi);
 	if (status < 0)
 		goto done;
