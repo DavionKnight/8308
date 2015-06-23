@@ -26,6 +26,10 @@
 
 #include <asm/irq.h>
 #include <asm/io.h>
+#include <asm/qe.h>
+#include <asm/qe_ic.h>
+#include <sysdev/fsl_soc.h>
+#include <linux/delay.h>
 
 /* SPI Controller registers */
 struct mpc83xx_spi_reg {
@@ -119,12 +123,18 @@ struct spi_mpc83xx_cs {
 //added by yangyf at 2015-04-22
 
 #define		GPIO_ADDR_OFFSET        0xc00
-#define 	GPIO_DAT				0x08
+//#define 	GPIO_DAT				0x08
 #define		SPI_CS_FPGA				1
 #define		SPI_CS_Flash			3
 #define		GPIO_REG_SIZE			4
 #define 	MPC8XXX_GPIO_PINS		32
 
+#define GPIO_DIR		       0x00
+#define GPIO_ODR		0x04
+#define GPIO_DAT		0x08
+
+#define SLAVE_SWITCH      4
+#define SLAVE_EPCS		9
 
 static void __iomem *immap;
 extern phys_addr_t get_immrbase(void);
@@ -136,30 +146,66 @@ static inline u32 mpc8xxx_gpio2mask(unsigned int gpio)
 
 static void switch_cs_enable(u8 cs, u8 polarity)
 {
-	if(!immap)
+	if(immap)
 	{
-		printk("\n the immap has not inita \n");
-		return;
+		clrbits32(immap, mpc8xxx_gpio2mask(SLAVE_SWITCH));
 	}
-	if(0 == cs)
-		clrbits32(immap, mpc8xxx_gpio2mask(SPI_CS_FPGA));
-	else if(1 == cs)
-		clrbits32(immap, mpc8xxx_gpio2mask(SPI_CS_Flash));
+	else
+		printk("\n the immap has not inita \n");
+
 }
 
 static void switch_cs_disable(u8 cs, u8 polarity)
 {
-	if(!immap)
+	if(immap)
+	{
+		setbits32(immap, mpc8xxx_gpio2mask(SLAVE_SWITCH));
+	}
+	else
+		printk("\n the immap has not inita \n");
+
+}
+static void chip_sel_pin_init(void)
+{
+	//void __iomem *immap;
+	int		d;
+	immap = ioremap(get_immrbase(), 0xd00);
+	if(immap)
+	{
+
+	       d = mpc8xxx_gpio2mask(23);//datasheet p167
+	       setbits32(immap + 0x118, d);
+
+	    	 d = mpc8xxx_gpio2mask(16);
+	    	 setbits32(immap + 0x118, d);
+		 d = mpc8xxx_gpio2mask(17);
+	        setbits32(immap + 0x118, d);
+		//printk("\n the date is %8x. \n",in_be32(immap +0x118));
+
+		   d = mpc8xxx_gpio2mask(14);
+	          setbits32(immap + 0x118, d);
+		   d = mpc8xxx_gpio2mask(15);
+	          setbits32(immap + 0x118, d);
+		printk("\n the date is %8x. \n",in_be32(immap +0x118));
+
+		d=mpc8xxx_gpio2mask(SLAVE_SWITCH);//switch enable
+		setbits32(immap + 0xc00+GPIO_DIR, d);
+		//clrbits32(immap +0xc00+ GPIO_DAT, d);
+		setbits32(immap +0xc00+ GPIO_DAT, d);
+
+		d = mpc8xxx_gpio2mask(SLAVE_EPCS);//epcs disable
+		setbits32(immap + 0xc00+GPIO_DIR, d);
+		setbits32(immap + 0xc00+ GPIO_DAT, d);
+
+		printk("\n the date is %x. \n",in_be32(immap +0xc00+ GPIO_DAT) );
+	}
+	else
 	{
 		printk("\n the immap has not inita \n");
-		return;
 	}
-	if(0 == cs)
-		setbits32(immap, mpc8xxx_gpio2mask(SPI_CS_FPGA));
-	else if(1 == cs)
-		setbits32(immap, mpc8xxx_gpio2mask(SPI_CS_Flash));
+	//switch_cs_disable(0, 0);
+	//setbits32(immap +0xc00+ GPIO_DAT, d);
 }
-
 //end add
 static inline void mpc83xx_spi_write_reg(__be32 __iomem * reg, u32 val)
 {
@@ -681,6 +727,9 @@ static int __init mpc83xx_spi_probe(struct platform_device *dev)
 	mpc83xx_spi_write_reg(&mpc83xx_spi->base->mode, regval);
 	spin_lock_init(&mpc83xx_spi->lock);
 	init_completion(&mpc83xx_spi->done);
+
+	chip_sel_pin_init();
+
 	INIT_WORK(&mpc83xx_spi->work, mpc83xx_spi_work);
 	INIT_LIST_HEAD(&mpc83xx_spi->queue);
 
@@ -744,7 +793,7 @@ static struct platform_driver mpc83xx_spi_driver = {
 
 static int __init mpc83xx_spi_init(void)
 {
-	immap = ioremap(get_immrbase() + GPIO_ADDR_OFFSET + GPIO_DAT, GPIO_REG_SIZE);  //added by yangyf at 2015-4-22
+//	immap = ioremap(get_immrbase() + GPIO_ADDR_OFFSET + GPIO_DAT, GPIO_REG_SIZE);  //added by yangyf at 2015-4-22
 	return platform_driver_probe(&mpc83xx_spi_driver, mpc83xx_spi_probe);
 }
 
