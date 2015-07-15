@@ -98,8 +98,8 @@ static struct w25p W25Q64;
 
 
 #define BCM_SPI_WORK_BITS	8
-#define BCM_SPI_WORK_SPEED	10000000
-#define BCM_SPI_WORK_DELAY	0
+#define BCM_SPI_WORK_SPEED	1000000
+#define BCM_SPI_WORK_DELAY	1
 #define BCM_SPI_WORK_MODE	0x03
 
 #define MULTI_REG_LEN_MAX	1
@@ -418,11 +418,11 @@ int fpga_spi_write(u16 addr, u16 size, u16 *data_buf)
 	memcpy(&tx_buf[3], data_buf, sizeof(u16) * size);
 
 	k_xfers->tx_buf = tx_buf;
-	//k_xfers->rx_buf = NULL;
+	k_xfers->rx_buf = NULL;
 	k_xfers->len = sizeof(u16) * size + 3;
-	//k_xfers->delay_usecs = BCM_SPI_WORK_DELAY;
-	//k_xfers->speed_hz = BCM_SPI_WORK_SPEED;
-	//k_xfers->bits_per_word = BCM_SPI_WORK_BITS;
+	k_xfers->delay_usecs = BCM_SPI_WORK_DELAY;
+	k_xfers->speed_hz = BCM_SPI_WORK_SPEED;
+	k_xfers->bits_per_word = BCM_SPI_WORK_BITS;
 
 	spi_message_add_tail(k_xfers, &msg);
 
