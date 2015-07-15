@@ -361,11 +361,11 @@ int fpga_spi_read(u16 addr, u16 size, u16 *data_buf)
 
 	spi_message_add_tail(k_xfers, &msg);
 
-	spi->chip_select = 0;
-	spi->mode = 1;
-	status = spi_setup(spi);
-	if (status < 0)
-		goto done;
+//	spi->chip_select = 0;
+//	spi->mode = 1;
+//	status = spi_setup(spi);
+//	if (status < 0)
+//		goto done;
 
 	status = spi_sync(spi, &msg);
 	if (status < 0)
@@ -426,11 +426,11 @@ int fpga_spi_write(u16 addr, u16 size, u16 *data_buf)
 
 	spi_message_add_tail(k_xfers, &msg);
 
-	spi->chip_select = 0;
-	spi->mode = 1;
-	status = spi_setup(spi);
-	if (status < 0)
-		goto done;
+//	spi->chip_select = 0;
+//	spi->mode = 1;
+//	status = spi_setup(spi);
+//	if (status < 0)
+//		goto done;
 
 	status = spi_sync(spi, &msg);
 	if (status < 0)
