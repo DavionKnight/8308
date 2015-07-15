@@ -17,7 +17,7 @@ typedef struct
 {
 	unsigned short	addr;
 	unsigned short	size;
-	unsigned short	pbuf[MULTI_REG_LEN_MAX];
+	unsigned char	pbuf[MULTI_REG_LEN_MAX];
 }spi_reg;
 
 #undef uchar

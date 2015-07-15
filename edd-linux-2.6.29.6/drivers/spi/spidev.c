@@ -108,6 +108,8 @@ static struct w25p W25Q64;
 #define SPI_FPGA_RD_BURST	0x03
 #define SPI_FPGA_RD_SINGLE	0x05
 
+#define SPI_WREN 0x06
+
 #endif
 
 /*
@@ -347,11 +349,15 @@ int fpga_spi_read(u16 addr, u16 size, u16 *data_buf)
 	memset(tx_buf, 0, sizeof(u16) * MULTI_REG_LEN_MAX + 3);
 	memset(rx_buf, 0, sizeof(u16) * MULTI_REG_LEN_MAX + 3);
 	memset(k_xfers, 0, sizeof(*k_xfers));
-
+#if 0
 	tx_buf[0] = SPI_FPGA_RD_BURST;
 	tx_buf[1] = (unsigned char)((addr >> 7) & 0xff);
 	tx_buf[2] = (unsigned char)((addr << 1) & 0xff);
-
+#else
+	tx_buf[0] = SPI_FPGA_RD_BURST;
+	tx_buf[1] = 0;
+	tx_buf[2] = (unsigned char)((addr) & 0xff);
+#endif
 	k_xfers->tx_buf = tx_buf;
 	k_xfers->rx_buf = rx_buf;
 	k_xfers->len = sizeof(u16) * size + 3;
@@ -362,10 +368,10 @@ int fpga_spi_read(u16 addr, u16 size, u16 *data_buf)
 	spi_message_add_tail(k_xfers, &msg);
 
 //	spi->chip_select = 0;
-//	spi->mode = 1;
-//	status = spi_setup(spi);
-//	if (status < 0)
-//		goto done;
+	spi->mode = 1;
+	status = spi_setup(spi);
+	if (status < 0)
+		goto done;
 
 	status = spi_sync(spi, &msg);
 	if (status < 0)
@@ -410,10 +416,35 @@ int fpga_spi_write(u16 addr, u16 size, u16 *data_buf)
 
 	memset(tx_buf, 0, sizeof(u16) * MULTI_REG_LEN_MAX + 3);
 	memset(k_xfers, 0, sizeof(*k_xfers));
+#if 1
+	tx_buf[0] = SPI_WREN;
 
+	k_xfers->tx_buf = tx_buf;
+	k_xfers->rx_buf = NULL;
+	k_xfers->len = 1;
+	k_xfers->delay_usecs = BCM_SPI_WORK_DELAY;
+	k_xfers->speed_hz = BCM_SPI_WORK_SPEED;
+	k_xfers->bits_per_word = BCM_SPI_WORK_BITS;
+
+	spi_message_add_tail(k_xfers, &msg);
+
+
+	spi->mode = 1;
+	status = spi_setup(spi);
+	if (status < 0)
+		goto done;
+
+	status = spi_sync(spi, &msg);
+	if (status < 0)
+		goto done;
+#endif
+	printk("before actually data\n");
+	spi_message_init(&msg);
+	memset(tx_buf, 0, sizeof(u16) * MULTI_REG_LEN_MAX + 3);
+	memset(k_xfers, 0, sizeof(*k_xfers));
 	tx_buf[0] = SPI_FPGA_WR_BURST;
-	tx_buf[1] = (unsigned char)((addr >> 7) & 0xff);
-	tx_buf[2] = (unsigned char)((addr << 1) & 0xff);
+	tx_buf[1] = 0;
+	tx_buf[2] = (unsigned char)((addr) & 0xff);
 
 	memcpy(&tx_buf[3], data_buf, sizeof(u16) * size);
 

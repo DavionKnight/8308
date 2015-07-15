@@ -9,7 +9,8 @@ int main(void)
 {
 	char	* dev_name	= "/dev/spi_drv";
 	spi_reg	reg;
-	int fd, flag = 1, i, data;
+	int fd, flag = 1, i;
+	u8 data = 0;
 	
    	printf( "\t Open the device : %s\n", dev_name );
    	if( (fd = open( dev_name, O_RDWR )) == -1 )
@@ -22,6 +23,7 @@ int main(void)
 	
 	while( flag )
    	{
+		data = 0;
    		printf( "\n\t read[1] or write[2] or reset[3] or quit[0]: " );
     	scanf( "%d", &data );
     	
