@@ -10,8 +10,9 @@ int main(void)
 	char	* dev_name	= "/dev/spi_drv";
 	spi_reg	reg;
 	int fd, flag = 1, i;
-	u8 data = 0;
-	
+	unsigned int  data = 0;
+	unsigned int data1 = 0;	
+
    	printf( "\t Open the device : %s\n", dev_name );
    	if( (fd = open( dev_name, O_RDWR )) == -1 )
    	{
@@ -25,7 +26,7 @@ int main(void)
    	{
 		data = 0;
    		printf( "\n\t read[1] or write[2] or reset[3] or quit[0]: " );
-    	scanf( "%d", &data );
+    	scanf( "%x", &data );
     	
    		switch( data )
    		{
@@ -49,7 +50,7 @@ int main(void)
 					printf( "\t\t read the register on the %02X:%02X\n\t\t", reg.addr, reg.size);
 					ioctl(fd, STATUS_SPI_GET, &reg);
 					for( i = 0; i < reg.size; i++ )
-						printf( "0x%04X ", reg.pbuf[i]);
+						printf( "0x%X ", reg.pbuf[i]);
 					printf( "\n" );
     			}
     		break;
@@ -70,13 +71,13 @@ int main(void)
 					for( i = 0; i < reg.size; i++ )
 					{
 						printf( "\t\t input number_%d (hex): ", i );
-						scanf( "%x", &data );
-						reg.pbuf[i]	= data;
+						scanf( "%x", &data1 );
+						reg.pbuf[i]	= data1;
 					}
 					
 					printf( "\t\t write the register on the %02X:%02X\n\t\t ", reg.addr, reg.size );
 					for( i = 0; i < reg.size; i++ )
-						printf( "0x%04X ", reg.pbuf[i] );
+						printf( "0x%X ", reg.pbuf[i] );
 					printf( "\n" );
 						
 					ioctl(fd, STATUS_SPI_SET, &reg);

@@ -324,14 +324,14 @@ done:
 
 #if 1 //added by yangyf at 2015-04-24
 
-int fpga_spi_read(u16 addr, u16 size, u16 *data_buf)
+int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 {
 	struct spi_device *spi;
 	u8 *tx_buf, *rx_buf;
 	int status = -EFAULT;
 	struct spi_message	msg;
 	struct spi_transfer	*k_xfers;
-
+	int i=0;
 	struct timeval tstart, tend;
 	do_gettimeofday(&tstart);
 
@@ -360,7 +360,7 @@ int fpga_spi_read(u16 addr, u16 size, u16 *data_buf)
 #endif
 	k_xfers->tx_buf = tx_buf;
 	k_xfers->rx_buf = rx_buf;
-	k_xfers->len = sizeof(u16) * size + 3;
+	k_xfers->len = sizeof(u8) * size + 4;
 	k_xfers->delay_usecs = BCM_SPI_WORK_DELAY;
 	k_xfers->speed_hz = BCM_SPI_WORK_SPEED;
 	k_xfers->bits_per_word = BCM_SPI_WORK_BITS;
@@ -376,8 +376,12 @@ int fpga_spi_read(u16 addr, u16 size, u16 *data_buf)
 	status = spi_sync(spi, &msg);
 	if (status < 0)
 		goto done;
-	memcpy(data_buf, &rx_buf[3], sizeof(u16) * size);
-	
+	memcpy(data_buf, &rx_buf[4], sizeof(u8) * size);
+	printk("the get data is:\n");
+
+	for(i=0;i<10;i++)
+	printk("  0x%x",rx_buf[i]);
+	printk("\n");
 done:
 	mutex_unlock(&spidev->buf_lock);
 	spi_dev_put(spi);
@@ -386,14 +390,13 @@ done:
 	kfree(tx_buf);
 	kfree(rx_buf);
 
-	do_gettimeofday(&tend);
-	printk("\nread time cost: %ld us\n", 1000000*(tend.tv_sec - tstart.tv_sec) + tend.tv_usec - tstart.tv_usec);
+	//do_gettimeofday(&tend);
+	//printk("\nread time cost: %ld us\n", 1000000*(tend.tv_sec - tstart.tv_sec) + tend.tv_usec - tstart.tv_usec);
 	
 	return status;
 }
 EXPORT_SYMBOL(fpga_spi_read);
-
-int fpga_spi_write(u16 addr, u16 size, u16 *data_buf)
+int fpga_spi_write_en()
 {
 	struct spi_device *spi;
 	u8 *tx_buf;
@@ -401,8 +404,57 @@ int fpga_spi_write(u16 addr, u16 size, u16 *data_buf)
 	struct spi_message	msg;
 	struct spi_transfer	*k_xfers;
 
-	struct timeval tstart, tend;
-	do_gettimeofday(&tstart);
+	spin_lock_irq(&spidev->spi_lock);
+	spi = spi_dev_get(spidev->spi);
+	spin_unlock_irq(&spidev->spi_lock);
+	mutex_lock(&spidev->buf_lock);
+
+	spi_message_init(&msg);
+
+	k_xfers = kmalloc(sizeof(struct spi_transfer), GFP_KERNEL);
+	tx_buf = kmalloc(sizeof(u8) * MULTI_REG_LEN_MAX + 3, GFP_KERNEL);
+
+	memset(tx_buf, 0, sizeof(u8) * MULTI_REG_LEN_MAX + 3);
+	memset(k_xfers, 0, sizeof(struct spi_transfer));
+
+	tx_buf[0] = SPI_WREN;
+
+        k_xfers->tx_buf = tx_buf;
+//        k_xfers->rx_buf = NULL;
+        k_xfers->len = 1;
+        k_xfers->delay_usecs = BCM_SPI_WORK_DELAY;
+        k_xfers->speed_hz = BCM_SPI_WORK_SPEED;
+        k_xfers->bits_per_word = BCM_SPI_WORK_BITS;
+
+        spi_message_add_tail(k_xfers, &msg);
+
+        spi->mode = 1;
+        status = spi_setup(spi);
+        if (status < 0)
+                goto done;
+        status = spi_sync(spi, &msg);
+        if (status < 0)
+                goto done;
+
+	
+done:
+	mutex_unlock(&spidev->buf_lock);
+	spi_dev_put(spi);
+
+
+	kfree(k_xfers);
+	kfree(tx_buf);
+	return status;
+}
+int fpga_spi_write(u16 addr, u16 size, u8 *data_buf)
+{
+	printk("before write en\n");
+	fpga_spi_write_en();
+	struct spi_device *spi;
+	u8 *tx_buf;
+	int status = -EFAULT;
+	struct spi_message	msg;
+	struct spi_transfer	*k_xfers;
 
 	spin_lock_irq(&spidev->spi_lock);
 	spi = spi_dev_get(spidev->spi);
@@ -416,7 +468,7 @@ int fpga_spi_write(u16 addr, u16 size, u16 *data_buf)
 
 	memset(tx_buf, 0, sizeof(u16) * MULTI_REG_LEN_MAX + 3);
 	memset(k_xfers, 0, sizeof(*k_xfers));
-#if 1
+#if 0 
 	tx_buf[0] = SPI_WREN;
 
 	k_xfers->tx_buf = tx_buf;
@@ -438,19 +490,25 @@ int fpga_spi_write(u16 addr, u16 size, u16 *data_buf)
 	if (status < 0)
 		goto done;
 #endif
-	printk("before actually data\n");
+#if 1
+
 	spi_message_init(&msg);
-	memset(tx_buf, 0, sizeof(u16) * MULTI_REG_LEN_MAX + 3);
+	memset(tx_buf, 0, sizeof(u8) * MULTI_REG_LEN_MAX + 3);
 	memset(k_xfers, 0, sizeof(*k_xfers));
 	tx_buf[0] = SPI_FPGA_WR_BURST;
 	tx_buf[1] = 0;
 	tx_buf[2] = (unsigned char)((addr) & 0xff);
 
-	memcpy(&tx_buf[3], data_buf, sizeof(u16) * size);
-
+	memcpy(&tx_buf[4], data_buf, sizeof(u8) * size);
+	printk("tx buf data:\n");
+	int i = 0;
+	for(i=0;i<8;i++)
+	printk("  0x%x",tx_buf[i]);
+	printk("\n");
+printk("dtat_buf[0] is %x\n",data_buf[0]);
 	k_xfers->tx_buf = tx_buf;
 	k_xfers->rx_buf = NULL;
-	k_xfers->len = sizeof(u16) * size + 3;
+	k_xfers->len = sizeof(u8) * size + 4;
 	k_xfers->delay_usecs = BCM_SPI_WORK_DELAY;
 	k_xfers->speed_hz = BCM_SPI_WORK_SPEED;
 	k_xfers->bits_per_word = BCM_SPI_WORK_BITS;
@@ -466,13 +524,13 @@ int fpga_spi_write(u16 addr, u16 size, u16 *data_buf)
 	status = spi_sync(spi, &msg);
 	if (status < 0)
 		goto done;
-	
+#endif	
 done:
 	mutex_unlock(&spidev->buf_lock);
 	spi_dev_put(spi);
 
-	do_gettimeofday(&tend);
-	printk("\nwrite time cost: %ld us\n", 1000000*(tend.tv_sec - tstart.tv_sec) + tend.tv_usec - tstart.tv_usec);
+//	do_gettimeofday(&tend);
+//	printk("\nwrite time cost: %ld us\n", 1000000*(tend.tv_sec - tstart.tv_sec) + tend.tv_usec - tstart.tv_usec);
 		
 
 	kfree(k_xfers);
