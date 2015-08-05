@@ -1,1 +1,0 @@
-/home/freddie/Documents/HX/u-boot-2009.11-rc1.2/cpu/mpc83xx/start.S
