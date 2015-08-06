@@ -2678,7 +2678,7 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 	{
 		chip->options |= NAND_NO_SUBPAGE_WRITE; 
 	}
-	printk("Flash type: %s\n",K9K8G08U0E_DEVID == dev_id?"K9K8G08U0E":K9K8G08U0B_DEVID == dev_id?"K9K8G08U0B":"UNKNOW");
+	//printk("Flash type: %s\n",K9K8G08U0E_DEVID == dev_id?"K9K8G08U0E":K9K8G08U0B_DEVID == dev_id?"K9K8G08U0B":"UNKNOW");
 	//add end
 	chip->options |= type->options & NAND_CHIPOPTIONS_MSK;
 
