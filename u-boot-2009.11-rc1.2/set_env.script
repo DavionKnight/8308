@@ -3,7 +3,7 @@ echo ---------------------------------------------------------------
 echo set variables
 echo ---------------------------------------------------------------
 
-set kernel_img a95000
+set kernel_img ac7000
 set dnu 'tftp 3000000 u-boot-nand.bin; nand erase 0 0x80000; nand write 3000000 0 0x80000'
 set dnk 'tftp 0x3000000 kernel.img; ubi part ubifs; ubi write 0x3000000 kernel $kernel_img'
 

@@ -2310,6 +2310,8 @@ static void nand_set_defaults(struct nand_chip *chip, int busw)
 /*
  * Get the flash and manufacturer id and lookup if the type is supported
  */
+#define K9K8G08U0B_DEVID        0xDC
+#define K9K8G08U0E_DEVID        0xD3
 static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 						  struct nand_chip *chip,
 						  int busw, int *maf_id)
@@ -2437,6 +2439,16 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 
 	/* Get chip options, preserve non chip based options */
 	chip->options &= ~NAND_CHIPOPTIONS_MSK;
+
+        //if flash is K9K8G08U0E,close subpage write mode -add by zhangjj 2015-8-6
+        if(K9K8G08U0E_DEVID == dev_id)
+        {
+                chip->options |= NAND_NO_SUBPAGE_WRITE;
+        }
+        printk("Flash type: %s\n",K9K8G08U0E_DEVID == dev_id?"K9K8G08U0E":K9K8G08U0B_DEVID == dev_id?"K9K8G08U0B":"UNKNOW");
+        //add end
+
+
 	chip->options |= type->options & NAND_CHIPOPTIONS_MSK;
 
 	/*
