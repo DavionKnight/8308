@@ -817,6 +817,60 @@ static int arp_process(struct sk_buff *skb)
 	if (arp->ar_op == htons(ARPOP_REQUEST) &&
 	    ip_route_input(skb, tip, sip, 0, dev) == 0) {
 
+		/* add by tianzhy 2015-5-26 */
+	 	/* The kernel arp protocol receives a arp request from a port, it will give an arp-reply with the incoming-rx-port mac. 
+			So we must compare the incoming port's ipaddr with the dst-ipaddr within the protocol packet, if they are in the save net segment, we give the arp-reply. 
+			Otherwise ,discard the arp-request.
+		*/ 
+		/*
+		printk("tip=%lx sip=%lx....\n", tip ,sip);
+		printk("name = %s \n", dev->name);
+
+		printk("ifa_local=%x ifa_addr=%x mask=%x \n", in_dev->ifa_list->ifa_local,in_dev->ifa_list->ifa_address,in_dev->ifa_list->ifa_mask);
+		*/
+#if 0 
+		if((sip & in_dev->ifa_list->ifa_mask) != (in_dev->ifa_list->ifa_address & in_dev->ifa_list->ifa_mask))
+			goto out;
+#else
+
+	 	struct net_device *p_net_dev = NULL;
+		unsigned char  dev_mac[MAX_ADDR_LEN];
+                if(!(strcasecmp(dev->name, "eth0"))) /* is eth0 */
+                 {
+                            if((sip & in_dev->ifa_list->ifa_mask) != (in_dev->ifa_list->ifa_address & in_dev->ifa_list->ifa_mask))
+                            {
+                                p_net_dev = dev_get_by_name(&init_net, "eth-hh");
+				if(p_net_dev == NULL)
+					goto out;
+				else
+					memcpy(dev_mac, p_net_dev->dev_addr, 6);	
+                            }
+				else
+				{
+						memcpy(dev_mac, dev->dev_addr, 6);
+				}
+                }
+                else if(!(strcasecmp(dev->name, "eth-hh")))
+                 {
+                            if((sip & in_dev->ifa_list->ifa_mask) != (in_dev->ifa_list->ifa_address & in_dev->ifa_list->ifa_mask))
+                            {
+                                p_net_dev = dev_get_by_name(&init_net, "eth0");
+				if(p_net_dev == NULL)
+					goto out;
+			 	else
+					memcpy(dev_mac, p_net_dev->dev_addr, 6);	
+                            }
+				else
+				{
+					memcpy(dev_mac, dev->dev_addr, 6);
+				}
+                 }        
+		else
+			goto out;
+
+#endif
+		/* end by tianzhy 2015-5-26*/
+
 		rt = skb->rtable;
 		addr_type = rt->rt_type;
 
