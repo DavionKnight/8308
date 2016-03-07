@@ -190,7 +190,7 @@
 			phy0: ethernet-phy@9 {
 				interrupt-parent = <&ipic>;
 				interrupts = <17 0x8>;
-				reg = <0x9>;
+				reg = <0x3>;
 				device_type = "ethernet-phy";
 			};
 			
