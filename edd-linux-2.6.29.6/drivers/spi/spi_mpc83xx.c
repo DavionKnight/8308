@@ -590,19 +590,25 @@ irqreturn_t mpc83xx_spi_irq(s32 irq, void *context_data)
 	event = mpc83xx_spi_read_reg(&mpc83xx_spi->base->event);
 
 	/* We need handle RX first */
+//	printk("irq event:0x%x\n",event);
 	if (event & SPIE_NE) {
 		u32 rx_data = mpc83xx_spi_read_reg(&mpc83xx_spi->base->receive);
+//		printk("irq rx data:0x%x\n",rx_data);
 		if (mpc83xx_spi->rx)
 			mpc83xx_spi->get_rx(rx_data, mpc83xx_spi);
 
 		if(0 == mpc83xx_spi->count)
+		{
 			complete(&mpc83xx_spi->done);
+			printk("complete spi->done\n");
+		}
 		
 		ret = IRQ_HANDLED;
 	}
 
 	if ((event & SPIE_NF) && (mpc83xx_spi->count > 0)) {
 		u32 word = mpc83xx_spi->get_tx(mpc83xx_spi);
+		printk("irq word:0x%x\n",word);
 		mpc83xx_spi_write_reg(&mpc83xx_spi->base->transmit, word);
 		mpc83xx_spi->count -= 1;
 

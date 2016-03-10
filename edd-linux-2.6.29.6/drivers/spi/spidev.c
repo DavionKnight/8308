@@ -343,11 +343,11 @@ int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 	spi_message_init(&msg);
 
 	k_xfers = kmalloc(sizeof(*k_xfers), GFP_KERNEL);
-	tx_buf = kmalloc(sizeof(u16) * MULTI_REG_LEN_MAX + 3, GFP_KERNEL);
-	rx_buf = kmalloc(sizeof(u16) * MULTI_REG_LEN_MAX + 3, GFP_KERNEL);
+	tx_buf = kmalloc(sizeof(u8) * MULTI_REG_LEN_MAX + 3, GFP_KERNEL);
+	rx_buf = kmalloc(sizeof(u8) * MULTI_REG_LEN_MAX + 3, GFP_KERNEL);
 
-	memset(tx_buf, 0, sizeof(u16) * MULTI_REG_LEN_MAX + 3);
-	memset(rx_buf, 0, sizeof(u16) * MULTI_REG_LEN_MAX + 3);
+	memset(tx_buf, 0, sizeof(u8) * MULTI_REG_LEN_MAX + 3);
+	memset(rx_buf, 0, sizeof(u8) * MULTI_REG_LEN_MAX + 3);
 	memset(k_xfers, 0, sizeof(*k_xfers));
 #if 0
 	tx_buf[0] = SPI_FPGA_RD_BURST;
@@ -355,20 +355,21 @@ int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 	tx_buf[2] = (unsigned char)((addr << 1) & 0xff);
 #else
 	tx_buf[0] = SPI_FPGA_RD_BURST;
-	tx_buf[1] = 0;
+	tx_buf[1] = (unsigned char )((addr>>8)&0xff);
 	tx_buf[2] = (unsigned char)((addr) & 0xff);
+	memcpy(&tx_buf[3], data_buf, size);
 #endif
 	k_xfers->tx_buf = tx_buf;
 	k_xfers->rx_buf = rx_buf;
-	k_xfers->len = sizeof(u8) * size + 4;
+	k_xfers->len = size + 3;
 	k_xfers->delay_usecs = BCM_SPI_WORK_DELAY;
-	k_xfers->speed_hz = BCM_SPI_WORK_SPEED;
+	k_xfers->speed_hz = 6500000;
 	k_xfers->bits_per_word = BCM_SPI_WORK_BITS;
 
 	spi_message_add_tail(k_xfers, &msg);
 
 //	spi->chip_select = 0;
-	spi->mode = 1;
+	spi->mode = 3;
 	status = spi_setup(spi);
 	if (status < 0)
 		goto done;
@@ -377,6 +378,12 @@ int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 	if (status < 0)
 		goto done;
 	memcpy(data_buf, &rx_buf[4], sizeof(u8) * size);
+
+	printk("spi->chip_select=%x\n",spi->chip_select);
+	printk("spi->mode=%x\n",spi->mode);
+	printk("spi->bits_per_word=%x\n",spi->bits_per_word);
+	printk("K_xfers->len=%x\n",k_xfers->len);
+
 	printk("the get data is:\n");
 
 	for(i=0;i<10;i++)
