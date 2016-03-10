@@ -26,6 +26,7 @@
 #include <malloc.h>
 #include <spi.h>
 #include <asm/mpc8xxx_spi.h>
+#include <gpio.h>
 
 #define SPI_EV_NE	(0x80000000 >> 22)	/* Receiver Not Empty */
 #define SPI_EV_NF	(0x80000000 >> 23)	/* Transmitter Not Full */
@@ -36,6 +37,23 @@
 #define SPI_MODE_EN	(0x80000000 >> 7)	/* Enable interface */
 
 #define SPI_TIMEOUT	1000
+
+int spi_cs_is_valid(unsigned int bus, unsigned int cs)
+{
+	if(cs>3)
+		return 0;
+	return 1;
+}
+
+void spi_cs_activate(struct spi_slave *slave)
+{
+//	printf("slave->cs=%d\n",slave->cs);
+	gpio_direction_output(slave->cs, 0);
+}
+void spi_cs_deactivate(struct spi_slave *slave)
+{
+	gpio_direction_output(slave->cs, 1);
+}
 
 struct spi_slave *spi_setup_slave(unsigned int bus, unsigned int cs,
 		unsigned int max_hz, unsigned int mode)
@@ -100,8 +118,8 @@ int spi_xfer(struct spi_slave *slave, unsigned int bitlen, const void *dout,
 	int tm, isRead = 0;
 	unsigned char charSize = 32;
 
-	debug("spi_xfer: slave %u:%u dout %08X din %08X bitlen %u\n",
-	      slave->bus, slave->cs, *(uint *) dout, *(uint *) din, bitlen);
+	debug("spi_xfer: slave %u:%u dout %08X din %08X bitlen %u, CONFIG_SYS_IMMR=%x\n",
+	      slave->bus, slave->cs, *(uint *) dout, *(uint *) din, bitlen,CONFIG_SYS_IMMR);
 
 	if (flags & SPI_XFER_BEGIN)
 		spi_cs_activate(slave);

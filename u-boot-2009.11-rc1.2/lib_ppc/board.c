@@ -21,6 +21,7 @@
  * MA 02111-1307 USA
  */
 
+#include <gpio.h>
 #include <common.h>
 #include <watchdog.h>
 #include <command.h>
@@ -1043,7 +1044,18 @@ printf ("Now running in RAM - U-Boot at: %08lx\n", dest_addr);
 	 do_mdm_init = gd->do_mdm_init;
  }
 #endif
+/*add by zhangjj 2016-3-9 add dpll init*/
+{
+	struct spi_slave *slave;
 
+	mpc83xx_gpio_init_f();
+	mpc83xx_gpio_init_r();
+
+	slave = spi_slave_init();
+	dpll_init_pre(slave);
+	//printf("board_gpio_init again here\n");
+	spi_slave_free(slave);
+}/*add end*/
 	/* Initialization complete - start the monitor */
 
 	/* main_loop() can return to retry autoboot, if so just run it again. */

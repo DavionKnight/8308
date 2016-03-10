@@ -116,6 +116,7 @@
 //#define CONFIG_SYS_SICRL		0x00000000
 //#define CONFIG_SYS_SICRH		0x01B7F103	/* RGMII */
 //#define CONFIG_SYS_SICRH		0x00155100	/* RGMII */
+//#define CONFIG_SYS_SICRH		0x01555002	/* RGMII */
 #define CONFIG_SYS_SICRL		0x00000040
 
 #define CONFIG_BOARD_EARLY_INIT_F /* call board_pre_init */
@@ -125,6 +126,10 @@
  * IMMR new address
  */
 #define CONFIG_SYS_IMMR		0xE0000000
+/*
+ *add 83xx gpio
+ */
+#define CONFIG_MPC83XX_GPIO
 
 /*
  * ESDHC registers
@@ -482,6 +487,20 @@
 #endif
 
 #endif
+
+/*
+ * SPI - Enhanced SPI add by zhangjj 2016-3-9
+ */
+#define CONFIG_HARD_SPI
+#define CONFIG_MPC8XXX_SPI
+
+#if defined(CONFIG_SPI_FLASH)
+#define CONFIG_SPI_FLASH_SPANSION
+#define CONFIG_CMD_SF
+#define CONFIG_SF_DEFAULT_SPEED 10000000
+#define CONFIG_SF_DEFAULT_MODE  0
+#endif
+/*add end*/
 
 /*
  * General PCI
