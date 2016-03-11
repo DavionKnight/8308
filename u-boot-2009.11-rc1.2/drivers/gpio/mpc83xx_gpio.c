@@ -93,15 +93,13 @@ int gpio_direction_output(unsigned gpio, int value)
 	unsigned int ctrlr;
 	unsigned int line;
 	unsigned int line_mask;
-	unsigned int syscfg;
 
 	if (value != 0 && value != 1) {
 		printf("Error: Value parameter must be 0 or 1.\n");
 		return -1;
 	}
-	syscfg = im->sysconf.sicrh;
-	out_be32(&im->sysconf.sicrh, 0x0155d002);
 
+	out_be32(&im->sysconf.sicrh, 0x0155d002);
 	gpio_set_value(gpio, value);
 
 	/* 32-bits per controller */
@@ -172,16 +170,11 @@ void mpc83xx_gpio_init_f()
 {
 	immap_t *im = (immap_t *)CONFIG_SYS_IMMR;
 
+#if 0
 #if MPC83XX_GPIO_CTRLRS >= 1
-printf("dir=0x%x\n",in_be32(&im->gpio[0].dir));
-printf("odr=0x%x\n",in_be32(&im->gpio[0].odr));
-printf("dat=0x%x\n",in_be32(&im->gpio[0].dat));
 	out_be32(&im->gpio[0].dir, 0xffffffff);
 	out_be32(&im->gpio[0].odr, 0x00000000);
 	out_be32(&im->gpio[0].dat, 0xffffffff);
-printf("dir=0x%x\n",in_be32(&im->gpio[0].dir));
-printf("odr=0x%x\n",in_be32(&im->gpio[0].odr));
-printf("dat=0x%x\n",in_be32(&im->gpio[0].dat));
 	out_be32(&im->gpio[0].ier, 0xFFFFFFFF); /* Clear all events */
 	out_be32(&im->gpio[0].imr, 0);
 	out_be32(&im->gpio[0].icr, 0);
@@ -194,6 +187,7 @@ printf("dat=0x%x\n",in_be32(&im->gpio[0].dat));
 	out_be32(&im->gpio[1].ier, 0xFFFFFFFF); /* Clear all events */
 	out_be32(&im->gpio[1].imr, 0);
 	out_be32(&im->gpio[1].icr, 0);
+#endif
 #endif
 }
 

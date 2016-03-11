@@ -360,7 +360,7 @@ int mpc83xx_spi_setup_transfer(struct spi_device *spi, struct spi_transfer *t)
 				  | SPMODE_PM(0xF));
 
 	cs->hw_mode |= SPMODE_LEN(bits_per_word);
-
+printk("spi spibrg=%d\n",mpc83xx_spi->spibrg);
 	if ((mpc83xx_spi->spibrg / hz) > 64) {
 		cs->hw_mode |= SPMODE_DIV16;
 		pm = mpc83xx_spi->spibrg / (hz * 64);

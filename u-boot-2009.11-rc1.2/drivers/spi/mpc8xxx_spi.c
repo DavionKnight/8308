@@ -28,13 +28,27 @@
 #include <asm/mpc8xxx_spi.h>
 #include <gpio.h>
 
+/* SPI Controller mode register definitions */
+#define	SPMODE_LOOP		(1 << 30)
+#define	SPMODE_CI_INACTIVEHIGH	(1 << 29)
+#define	SPMODE_CP_BEGIN_EDGECLK	(1 << 28)
+#define	SPMODE_DIV16		(1 << 27)
+#define	SPMODE_REV		(1 << 26)
+#define	SPMODE_MS		(1 << 25)
+#define	SPMODE_ENABLE		(1 << 24)
+#define	SPMODE_LEN(x)		((x) << 20)
+#define	SPMODE_PM(x)		((x) << 16)
+#define	SPMODE_OP		(1 << 14)
+#define	SPMODE_CG(x)		((x) << 7)
+
+#define	SPMODE_INIT_VAL (SPMODE_REV | \
+			 SPMODE_MS | SPMODE_LEN(7) | SPMODE_PM(0x5))
+
 #define SPI_EV_NE	(0x80000000 >> 22)	/* Receiver Not Empty */
 #define SPI_EV_NF	(0x80000000 >> 23)	/* Transmitter Not Full */
 
-#define SPI_MODE_LOOP	(0x80000000 >> 1)	/* Loopback mode */
-#define SPI_MODE_REV	(0x80000000 >> 5)	/* Reverse mode - MSB first */
-#define SPI_MODE_MS	(0x80000000 >> 6)	/* Always master */
-#define SPI_MODE_EN	(0x80000000 >> 7)	/* Enable interface */
+#define ESPI_EV_RNE		(1 << 9)
+#define ESPI_EV_TNF		(1 << 8)
 
 #define SPI_TIMEOUT	1000
 
@@ -47,11 +61,11 @@ int spi_cs_is_valid(unsigned int bus, unsigned int cs)
 
 void spi_cs_activate(struct spi_slave *slave)
 {
-//	printf("slave->cs=%d\n",slave->cs);
 	gpio_direction_output(slave->cs, 0);
 }
 void spi_cs_deactivate(struct spi_slave *slave)
 {
+	udelay(10);
 	gpio_direction_output(slave->cs, 1);
 }
 
@@ -69,12 +83,11 @@ struct spi_slave *spi_setup_slave(unsigned int bus, unsigned int cs,
 
 	slave->bus = bus;
 	slave->cs = cs;
-
 	/*
 	 * TODO: Some of the code in spi_init() should probably move
 	 * here, or into spi_claim_bus() below.
 	 */
-
+//	spi_init();
 	return slave;
 }
 
@@ -91,12 +104,13 @@ void spi_init(void)
 	 * SPI pins on the MPC83xx are not muxed, so all we do is initialize
 	 * some registers
 	 */
-	spi->mode = SPI_MODE_REV | SPI_MODE_MS | SPI_MODE_EN;
-	spi->mode = (spi->mode & 0xfff0ffff) | (1 << 16); /* Use SYSCLK / 8
-							     (16.67MHz typ.) */
+	spi->mode = 0;
+	spi->mode = SPMODE_INIT_VAL | SPMODE_ENABLE;
+//	spi->mode = (spi->mode & 0xfff0ffff) | (1 << 16); /* Use SYSCLK / 8   (16.67MHz typ.) */
 	spi->event = 0xffffffff;	/* Clear all SPI events */
 	spi->mask = 0x00000000;	/* Mask  all SPI interrupts */
 	spi->com = 0;		/* LST bit doesn't do anything, so disregard */
+	printf("mode = 0x%x\n",spi->mode);
 }
 
 int spi_claim_bus(struct spi_slave *slave)
@@ -108,14 +122,14 @@ void spi_release_bus(struct spi_slave *slave)
 {
 
 }
-
+#if 1
 int spi_xfer(struct spi_slave *slave, unsigned int bitlen, const void *dout,
 		void *din, unsigned long flags)
 {
 	volatile spi8xxx_t *spi = &((immap_t *) (CONFIG_SYS_IMMR))->spi;
 	unsigned int tmpdout, tmpdin, event;
 	int numBlks = bitlen / 32 + (bitlen % 32 ? 1 : 0);
-	int tm, isRead = 0;
+	int tm=0, isRead = 0;
 	unsigned char charSize = 32;
 
 	debug("spi_xfer: slave %u:%u dout %08X din %08X bitlen %u, CONFIG_SYS_IMMR=%x\n",
@@ -125,7 +139,6 @@ int spi_xfer(struct spi_slave *slave, unsigned int bitlen, const void *dout,
 		spi_cs_activate(slave);
 
 	spi->event = 0xffffffff;	/* Clear all SPI events */
-
 	/* handle data in 32-bit chunks */
 	while (numBlks--) {
 		tmpdout = 0;
@@ -141,21 +154,25 @@ int spi_xfer(struct spi_slave *slave, unsigned int bitlen, const void *dout,
 		 * 4 < len <= 16          len - 1
 		 * len > 16               0
 		 */
-
 		if (bitlen <= 16) {
 			if (bitlen <= 4)
 				spi->mode = (spi->mode & 0xff0fffff) |
 				            (3 << 20);
 			else
-				spi->mode = (spi->mode & 0xff0fffff) |
-				            ((bitlen - 1) << 20);
+			{
+				unsigned int aa=spi->mode;
+				spi->mode = 0;
+				spi->mode = (aa & 0xff0fffff) |
+				            ((bitlen - 1) << 20|SPMODE_ENABLE);
+			}
 		} else {
 			spi->mode = (spi->mode & 0xff0fffff);
 			/* Set up the next iteration if sending > 32 bits */
 			bitlen -= 32;
 			dout += 4;
 		}
-
+printf("spmode=0x%x\n",spi->mode);
+	printf("tmpdout=0x%x\n",tmpdout);
 		spi->tx = tmpdout;	/* Write the data out */
 		debug("*** spi_xfer: ... %08x written\n", tmpdout);
 
@@ -197,3 +214,132 @@ int spi_xfer(struct spi_slave *slave, unsigned int bitlen, const void *dout,
 
 	return 0;
 }
+#else
+unsigned char	cmd_buf[16];
+size_t cmd_len_t =0;
+size_t data_len_t =0;
+int max_tran_len = 0xfff0;
+int spi_xfer(struct spi_slave *slave, unsigned int bitlen, const void *data_out,
+		void *data_in, unsigned long flags)
+{
+	//ccsr_espi_t *espi = (void *)(CONFIG_SYS_MPC85xx_ESPI_ADDR);
+	volatile spi8xxx_t *espi = &((immap_t *) (CONFIG_SYS_IMMR))->spi;
+	unsigned char  tmpdout, tmpdin, event;
+	unsigned char *dout = NULL;
+	void *din = NULL;
+	int len = 0;
+	int num_blks, num_chunks, tran_len;
+	int num_bytes;
+	unsigned char *ch;
+	unsigned char *buffer = NULL;
+	size_t buf_len;
+	size_t cmd_len = cmd_len_t;
+	size_t data_len = bitlen / 8;
+	size_t rx_offset = 0;
+
+	switch (flags) {
+	case SPI_XFER_BEGIN:
+		cmd_len = cmd_len_t = data_len;
+		memcpy(cmd_buf, data_out, cmd_len);
+		return 0;
+	case 0:
+	case SPI_XFER_END:
+		if (bitlen == 0) {
+			spi_cs_deactivate(slave);
+			return 0;
+		}
+		buf_len = 2 * cmd_len + min(data_len, max_tran_len);
+		len = cmd_len + data_len;
+		rx_offset = cmd_len;
+		buffer = (unsigned char *)malloc(buf_len);
+		if (!buffer) {
+			debug("SF: Failed to malloc memory.\n");
+			return 1;
+		}
+		memcpy(buffer, cmd_buf, cmd_len);
+		if (data_in == NULL)
+			memcpy(buffer + cmd_len, data_out, data_len);
+		break;
+	case SPI_XFER_BEGIN | SPI_XFER_END:
+		len = data_len;
+		buffer = (unsigned char *)malloc(len * 2);
+		if (!buffer) {
+			debug("SF: Failed to malloc memory.\n");
+			return 1;
+		}
+		memcpy(buffer, data_out, len);
+		rx_offset = len;
+		cmd_len = 0;
+		break;
+	}
+
+	debug("spi_xfer: slave %u:%u dout %08X(%p) din %08X(%p) len %u\n",
+	      slave->bus, slave->cs, *(uint *) dout,
+	      dout, *(uint *) din, din, len);
+
+	num_chunks = data_len / max_tran_len + (data_len % max_tran_len ? 1 : 0);
+	while (num_chunks--) {
+		if (data_in)
+			din = buffer + rx_offset;
+		dout = buffer;
+		tran_len = min(data_len , max_tran_len);
+		num_blks = (tran_len + cmd_len) / 4 +
+			((tran_len + cmd_len) % 4 ? 1 : 0);
+		num_bytes = (tran_len + cmd_len) % 4;
+		data_len_t = tran_len + cmd_len;
+		spi_cs_activate(slave);
+
+		/* Clear all eSPI events */
+		espi->event = 0xffffffff;
+
+		num_blks = 3;//modified
+		/* handle data in 32-bit chunks */
+		while (num_blks--) {
+
+			event = espi->event;
+printf("event=0x%x\n",event);
+			if (event & ESPI_EV_TNF) {
+				tmpdout = *(dout+2-num_blks);
+
+	printf("tmpdout=0x%x\n",tmpdout);
+				espi->tx= tmpdout;
+				espi->event= ESPI_EV_TNF;
+				debug("***spi_xfer:...%08x written\n", tmpdout);
+			}
+
+			/* Wait for eSPI transmit to get out */
+			udelay(80);
+
+			event = espi->event;
+			if (event & ESPI_EV_RNE) {
+				tmpdin = espi->rx;
+				if (num_blks == 0 && num_bytes != 0) {
+					ch = (unsigned char *)&tmpdin;
+					while (num_bytes--)
+						*(unsigned char *)din++ = *ch++;
+				} else {
+					*(u32 *) din = tmpdin;
+					din += 4;
+				}
+
+				espi->event= espi->event
+						| ESPI_EV_RNE;
+				debug("***spi_xfer:...%08x readed\n", tmpdin);
+			}
+		}
+		if (data_in) {
+			memcpy(data_in, buffer + 2 * cmd_len, tran_len);
+			if (*buffer == 0x0b) {
+				data_in += tran_len;
+				data_len -= tran_len;
+				*(int *)buffer += tran_len;
+			}
+		}
+		spi_cs_deactivate(slave);
+	}
+
+	free(buffer);
+	return 0;
+}
+
+#endif

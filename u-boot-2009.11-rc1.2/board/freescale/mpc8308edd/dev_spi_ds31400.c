@@ -54,8 +54,7 @@ int ds31400_read(struct spi_slave *spi, unsigned short addr, void *data, size_t 
 	/* LSB must be '1' to burst read */
 	if (data_len > 1)
 		buf[1] |= 0x01;
-
-	return  spi_read_write(spi, buf, cmd_len, NULL, data, data_len);
+	return  spi_read_write(spi, buf, cmd_len, buf, data, data_len);
 }
 
 int ds31400_write(struct spi_slave *spi, unsigned short addr,
@@ -84,6 +83,11 @@ int ds31400_write_byte(struct spi_slave *spi, unsigned short addr, uint8_t data)
 	size_t data_len = 1;
 	return ds31400_write(spi, addr,&data, data_len);
 }
+int ds31400_read_byte(struct spi_slave *spi, unsigned short addr, uint8_t *data)
+{
+	size_t data_len = 1;
+	return ds31400_read(spi, addr,data, data_len);
+}
 struct spi_slave *spi_slave_init(void)
 {
 
@@ -93,7 +97,8 @@ struct spi_slave *spi_slave_init(void)
 	unsigned int	mode = SPI_MODE_0;
 
 	slave = spi_setup_slave(bus, cs, 1000000, mode);
-	if (!slave) {
+	if (!slave)
+	{
 		printf("Invalid device %d:%d\n", bus, cs);
 		return NULL;
 	}
@@ -114,10 +119,19 @@ int spi_slave_free(struct spi_slave *slave)
 
 void dpll_init_pre(struct spi_slave *spi)
 {
+    unsigned int  rddata;
     printf("dpll_init...");
     /* reset MCPLL */
-//    printf("read 00=0x%x\n",ds31400_read(spi, 0x03DE, 0xF0,1);
+#if 0
+    ds31400_read_byte(spi, 0x0,&rddata);
+    printf("\nread 00=0x%x\n",rddata);
+    ds31400_read_byte(spi, 0x1,&rddata);
+    printf("\nread 01=0x%x\n",rddata);
+#endif
     ds31400_write_byte(spi, 0x03DE, 0xF0);
+//    ds31400_read_byte(spi, 0x03de,&rddata);
+//    printf("\nread 03de=0x%x\n",rddata);
+#if 1
     ds31400_write_byte(spi, 0x03DF, 0x40);
     ds31400_write_byte(spi, 0x03E0, 0x3F);
     ds31400_write_byte(spi, 0x03E1, 0x8F);
@@ -169,28 +183,6 @@ void dpll_init_pre(struct spi_slave *spi)
     ds31400_write_byte(spi, 0x03E5, 0x04);
     ds31400_write_byte(spi, 0x03E5, 0x00);
 
-
-/************************************************************/
-/*
-  ;-----------------------------------
-  ; Begin OC1 Register Bank
-  ;-----------------------------------
-*/
-/*    
-  
-
-*/
-    /*new 
-	./demo write  00C0	01
-	./demo write  00C1	C0
-	./demo write  00C3 	80		                       
-	./demo write  00C4	80	
-	./demo write  00C8	01
-
-	./demo write  00C9	00
-	./demo write  00CA	00
-	./demo write  00CB	00
-*/
     ds31400_write_byte(spi, 0x00C0, 0x01);
     ds31400_write_byte(spi, 0x00C1, 0xc0);
     ds31400_write_byte(spi, 0x00C3, 0x80);
@@ -201,25 +193,6 @@ void dpll_init_pre(struct spi_slave *spi)
     ds31400_write_byte(spi, 0x00CA, 0x00);
     ds31400_write_byte(spi, 0x00CB, 0x00);
     
-/*    
-    
-        ./demo write  00D0	88
-	./demo write  00D2	13
-	./demo write  00D8	02
-
-	./demo write  00E0	00
-	./demo write  00E1	00
-	./demo write  00E2	00
-	./demo write  00E3	00
-	./demo write  00E4	00
-	./demo write  00E5	00
-	./demo write  00E6	00
-	./demo write  00E7	00
-	./demo write  00E8	00
-	./demo write  00E9	50
-
-	./demo write  00F2	2C
-*/
 
 
     ds31400_write_byte(spi, 0x00D0, 0x88);
@@ -239,29 +212,6 @@ void dpll_init_pre(struct spi_slave *spi)
 
     ds31400_write_byte(spi, 0x00F2, 0x2C);
 
-
-
-
-/*
-  ;-----------------------------------
-  ; Begin OC2Register Bank
-  ;-----------------------------------
-*/
-/*    
-  
-
-*/
-    /*new 
-	./demo write  00C0	01
-	./demo write  00C1	C0
-	./demo write  00C3 	80		                       
-	./demo write  00C4	80	
-	./demo write  00C8	01
-
-	./demo write  00C9	00
-	./demo write  00CA	00
-	./demo write  00CB	00
-*/
     ds31400_write_byte(spi, 0x00C0, 0x02);
     ds31400_write_byte(spi, 0x00C1, 0xc0);
     ds31400_write_byte(spi, 0x00C3, 0x80);
@@ -272,27 +222,6 @@ void dpll_init_pre(struct spi_slave *spi)
     ds31400_write_byte(spi, 0x00CA, 0x00);
     ds31400_write_byte(spi, 0x00CB, 0x00);
     
-/*    
-    
-        ./demo write  00D0	88
-	./demo write  00D2	13
-	./demo write  00D8	02
-
-	./demo write  00E0	00
-	./demo write  00E1	00
-	./demo write  00E2	00
-	./demo write  00E3	00
-	./demo write  00E4	00
-	./demo write  00E5	00
-	./demo write  00E6	00
-	./demo write  00E7	00
-	./demo write  00E8	00
-	./demo write  00E9	50
-
-	./demo write  00F2	2C
-*/
-
-
     ds31400_write_byte(spi, 0x00D0, 0x88);
     ds31400_write_byte(spi, 0x00D2, 0x13);
     ds31400_write_byte(spi, 0x00D8, 0x02);
@@ -309,9 +238,6 @@ void dpll_init_pre(struct spi_slave *spi)
     ds31400_write_byte(spi, 0x00E9, 0x50);
 
     ds31400_write_byte(spi, 0x00F2, 0x2C);
-#if 0
-   
-
 #endif
     printf("done!\n\r");
 }
