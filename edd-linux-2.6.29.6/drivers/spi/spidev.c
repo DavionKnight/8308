@@ -349,8 +349,10 @@ int fpga_spi_read(u16 addr, u16 size, u16 *data_buf)
 	memset(k_xfers, 0, sizeof(*k_xfers));
 
 	tx_buf[0] = SPI_FPGA_RD_BURST;
-	tx_buf[1] = (unsigned char)((addr >> 7) & 0xff);
-	tx_buf[2] = (unsigned char)((addr << 1) & 0xff);
+	tx_buf[1] = (unsigned char)((addr >> 8) & 0xff);
+	tx_buf[2] = (unsigned char)((addr << 0) & 0xff);
+/*	tx_buf[1] = (unsigned char)((addr >> 7) & 0xff);
+	tx_buf[2] = (unsigned char)((addr << 1) & 0xff);	*/
 
 	k_xfers->tx_buf = tx_buf;
 	k_xfers->rx_buf = rx_buf;
@@ -370,6 +372,7 @@ int fpga_spi_read(u16 addr, u16 size, u16 *data_buf)
 	status = spi_sync(spi, &msg);
 	if (status < 0)
 		goto done;
+	printk("rxbuf=%x %x %x %x %x\n",rx_buf[0],rx_buf[1],rx_buf[2],rx_buf[3],rx_buf[4]);
 	memcpy(data_buf, &rx_buf[3], sizeof(u16) * size);
 	
 done:
@@ -412,8 +415,10 @@ int fpga_spi_write(u16 addr, u16 size, u16 *data_buf)
 	memset(k_xfers, 0, sizeof(*k_xfers));
 
 	tx_buf[0] = SPI_FPGA_WR_BURST;
-	tx_buf[1] = (unsigned char)((addr >> 7) & 0xff);
-	tx_buf[2] = (unsigned char)((addr << 1) & 0xff);
+	tx_buf[1] = (unsigned char)((addr >> 8) & 0xff);
+	tx_buf[2] = (unsigned char)((addr << 0) & 0xff);
+/*	tx_buf[1] = (unsigned char)((addr >> 7) & 0xff);
+	tx_buf[2] = (unsigned char)((addr << 1) & 0xff);	*/
 
 	memcpy(&tx_buf[3], data_buf, sizeof(u16) * size);
 

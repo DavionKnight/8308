@@ -380,9 +380,11 @@ static int mpc83xx_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 	/* enable rx and tx ints */
 	mpc83xx_spi_write_reg(&mpc83xx_spi->base->mask, SPIM_NE | SPIM_NF);
 
+	printk("come in spi bufs\n");
+
 	/* transmit word */
-	//word = mpc83xx_spi->get_tx(mpc83xx_spi);
-	//mpc83xx_spi_write_reg(&mpc83xx_spi->base->transmit, word);
+	word = mpc83xx_spi->get_tx(mpc83xx_spi);
+	mpc83xx_spi_write_reg(&mpc83xx_spi->base->transmit, word);
 
 	wait_for_completion(&mpc83xx_spi->done);
 

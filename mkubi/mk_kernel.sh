@@ -1,5 +1,5 @@
 #!/bin/sh
 
-mkfs.ubifs -r ./bin -m 2048 -e 129024 -c 300 -o kernel.img
+mkfs.ubifs -r ./bin -m 2048 -e 126976 -c 300 -o kernel.img
 
-cp kernel.img /tftpboot/
+cp kernel.img /home/yhy/Documents/tftpboot/
