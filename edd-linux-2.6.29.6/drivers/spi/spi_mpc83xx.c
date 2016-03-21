@@ -360,7 +360,7 @@ int mpc83xx_spi_setup_transfer(struct spi_device *spi, struct spi_transfer *t)
 				  | SPMODE_PM(0xF));
 
 	cs->hw_mode |= SPMODE_LEN(bits_per_word);
-printk("spi spibrg=%d\n",mpc83xx_spi->spibrg);
+//printk("spi spibrg=%d\n",mpc83xx_spi->spibrg);
 	if ((mpc83xx_spi->spibrg / hz) > 64) {
 		cs->hw_mode |= SPMODE_DIV16;
 		pm = mpc83xx_spi->spibrg / (hz * 64);
@@ -429,7 +429,7 @@ static int mpc83xx_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 	/* transmit word */
 	word = mpc83xx_spi->get_tx(mpc83xx_spi);
 	mpc83xx_spi_write_reg(&mpc83xx_spi->base->transmit, word);
-	printk("len is %x, word is %x\n",len,word);
+	//printk("len is %x, word is %x\n",len,word);
 
 	wait_for_completion(&mpc83xx_spi->done);
 
@@ -443,7 +443,6 @@ static void mpc83xx_spi_work(struct work_struct *work)
 {
 	struct mpc83xx_spi *mpc83xx_spi =
 		container_of(work, struct mpc83xx_spi, work);
-
 	spin_lock_irq(&mpc83xx_spi->lock);
 	mpc83xx_spi->busy = 1;
 	while (!list_empty(&mpc83xx_spi->queue)) {
@@ -600,7 +599,6 @@ irqreturn_t mpc83xx_spi_irq(s32 irq, void *context_data)
 		if(0 == mpc83xx_spi->count)
 		{
 			complete(&mpc83xx_spi->done);
-			printk("complete spi->done\n");
 		}
 		
 		ret = IRQ_HANDLED;
@@ -608,7 +606,7 @@ irqreturn_t mpc83xx_spi_irq(s32 irq, void *context_data)
 
 	if ((event & SPIE_NF) && (mpc83xx_spi->count > 0)) {
 		u32 word = mpc83xx_spi->get_tx(mpc83xx_spi);
-		printk("irq word:0x%x\n",word);
+		//printk("irq word:0x%x\n",word);
 		mpc83xx_spi_write_reg(&mpc83xx_spi->base->transmit, word);
 		mpc83xx_spi->count -= 1;
 
@@ -684,8 +682,8 @@ static int __init mpc83xx_spi_probe(struct platform_device *dev)
 	mpc83xx_spi->activate_cs = switch_cs_enable; //pdata->activate_cs; //changed by yangyf
 	mpc83xx_spi->deactivate_cs = switch_cs_disable; //pdata->deactivate_cs; //changed by yangyf
 	mpc83xx_spi->qe_mode = pdata->qe_mode;
-	mpc83xx_spi->get_rx = mpc83xx_spi_rx_buf_u8;
-	mpc83xx_spi->get_tx = mpc83xx_spi_tx_buf_u8;
+	mpc83xx_spi->get_rx = mpc83xx_spi_rx_buf_u32;
+	mpc83xx_spi->get_tx = mpc83xx_spi_tx_buf_u32;
 	mpc83xx_spi->spibrg = pdata->sysclk;
 
 	mpc83xx_spi->rx_shift = 0;

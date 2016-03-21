@@ -21,13 +21,23 @@ extern int fpga_spi_write(u16 addr, u16 size, u8 *data_buf);
 
 static int __init test_init(void)
 {
-	int status;
+	int status,i=0;
 	struct spi_device *spi;
+	struct timeval start,stop;
+
 	unsigned char buf[20]={0xaa,0xaa,0xaa,0xaa};
 	 
 	printk(KERN_ALERT "driver init!\n");
-	fpga_spi_read(0xa,2,buf);
-
+	do_gettimeofday(&start);
+	for(i=0;i<1000;i++)
+	{
+		fpga_spi_read(0x2c,2,buf);
+		fpga_spi_write(0x2c,2,buf);
+	}
+	do_gettimeofday(&stop);
+	printk("start:tv_sec=%d,tv_usec=%d\n",start.tv_sec,start.tv_usec);
+	printk("stop :tv_sec=%d,tv_usec=%d\n",stop.tv_sec,stop.tv_usec);
+	printk("buf=0x%02x 0x%02x\n",buf[0],buf[1]);
 	return 0;
 }
 

@@ -97,7 +97,7 @@ static struct spidev_data	 *spidev;
 static struct w25p W25Q64;
 
 
-#define BCM_SPI_WORK_BITS	8
+#define BCM_SPI_WORK_BITS	32
 #define BCM_SPI_WORK_SPEED	1000000
 #define BCM_SPI_WORK_DELAY	1
 #define BCM_SPI_WORK_MODE	0x03
@@ -349,7 +349,7 @@ int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 	memset(tx_buf, 0, sizeof(u8) * MULTI_REG_LEN_MAX + 3);
 	memset(rx_buf, 0, sizeof(u8) * MULTI_REG_LEN_MAX + 3);
 	memset(k_xfers, 0, sizeof(*k_xfers));
-#if 0
+#if 0 //modified by zhangjj 2-16-3-10
 	tx_buf[0] = SPI_FPGA_RD_BURST;
 	tx_buf[1] = (unsigned char)((addr >> 7) & 0xff);
 	tx_buf[2] = (unsigned char)((addr << 1) & 0xff);
@@ -361,7 +361,7 @@ int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 #endif
 	k_xfers->tx_buf = tx_buf;
 	k_xfers->rx_buf = rx_buf;
-	k_xfers->len = size + 3;
+	k_xfers->len = ((size + 3)/4+(size+3)%4?1:0)*4;
 	k_xfers->delay_usecs = BCM_SPI_WORK_DELAY;
 	k_xfers->speed_hz = 6500000;
 	k_xfers->bits_per_word = BCM_SPI_WORK_BITS;
@@ -377,18 +377,14 @@ int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 	status = spi_sync(spi, &msg);
 	if (status < 0)
 		goto done;
-	memcpy(data_buf, &rx_buf[4], sizeof(u8) * size);
-
-	printk("spi->chip_select=%x\n",spi->chip_select);
-	printk("spi->mode=%x\n",spi->mode);
-	printk("spi->bits_per_word=%x\n",spi->bits_per_word);
-	printk("K_xfers->len=%x\n",k_xfers->len);
-
+	memcpy(data_buf, &rx_buf[3], sizeof(u8) * size);
+#if 0
 	printk("the get data is:\n");
 
 	for(i=0;i<10;i++)
 	printk("  0x%x",rx_buf[i]);
 	printk("\n");
+#endif
 done:
 	mutex_unlock(&spidev->buf_lock);
 	spi_dev_put(spi);
@@ -455,7 +451,7 @@ done:
 }
 int fpga_spi_write(u16 addr, u16 size, u8 *data_buf)
 {
-	printk("before write en\n");
+//	printk("before write en\n");
 	fpga_spi_write_en();
 	struct spi_device *spi;
 	u8 *tx_buf;
@@ -503,19 +499,22 @@ int fpga_spi_write(u16 addr, u16 size, u8 *data_buf)
 	memset(tx_buf, 0, sizeof(u8) * MULTI_REG_LEN_MAX + 3);
 	memset(k_xfers, 0, sizeof(*k_xfers));
 	tx_buf[0] = SPI_FPGA_WR_BURST;
-	tx_buf[1] = 0;
+	tx_buf[1] = (unsigned char)((addr>>8)&0xff);
 	tx_buf[2] = (unsigned char)((addr) & 0xff);
 
-	memcpy(&tx_buf[4], data_buf, sizeof(u8) * size);
+	memcpy(&tx_buf[3], data_buf, sizeof(u8) * size);
+#if 0
 	printk("tx buf data:\n");
 	int i = 0;
 	for(i=0;i<8;i++)
 	printk("  0x%x",tx_buf[i]);
 	printk("\n");
 printk("dtat_buf[0] is %x\n",data_buf[0]);
+#endif
 	k_xfers->tx_buf = tx_buf;
 	k_xfers->rx_buf = NULL;
-	k_xfers->len = sizeof(u8) * size + 4;
+//	k_xfers->len = sizeof(u8) * size + 4;
+	k_xfers->len = ((size + 3)/4+(size+3)%4?1:0)*4;
 	k_xfers->delay_usecs = BCM_SPI_WORK_DELAY;
 	k_xfers->speed_hz = BCM_SPI_WORK_SPEED;
 	k_xfers->bits_per_word = BCM_SPI_WORK_BITS;

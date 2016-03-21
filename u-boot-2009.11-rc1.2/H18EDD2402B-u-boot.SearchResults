@@ -1,3 +1,0 @@
----- nand_init_chip Matches (2 in 1 files) ----
-Nand.c (drivers\mtd\nand):static void nand_init_chip(struct mtd_info *mtd, struct nand_chip *nand,
-Nand.c (drivers\mtd\nand):		nand_init_chip(&nand_info[i], &nand_chip[i], base_address[i]);
