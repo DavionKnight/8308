@@ -222,7 +222,8 @@
 			interrupts = <32 0x8 33 0x8 34 0x8>;
 			interrupt-parent = <&ipic>;
 /*			tbi-handle = <&tbi0>;    */
-			phy-handle = < &phy0 >;
+		//	phy-handle = < &phy0 >;	
+			fixed-link = <1 1 100 0 0>;
 /*			sleep = <&pmc 0xc0000000>;	*/
 			fsl,magic-packet;
 			fsl,lossless-flow-ctrl = <0>;

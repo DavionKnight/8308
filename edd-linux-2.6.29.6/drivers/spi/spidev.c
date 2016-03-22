@@ -340,6 +340,8 @@ int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 	spin_unlock_irq(&spidev->spi_lock);
 	mutex_lock(&spidev->buf_lock);
 
+	size = size*sizeof(unsigned short);
+
 	spi_message_init(&msg);
 
 	k_xfers = kmalloc(sizeof(*k_xfers), GFP_KERNEL);
@@ -355,8 +357,8 @@ int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 	tx_buf[2] = (unsigned char)((addr << 1) & 0xff);
 #else
 	tx_buf[0] = SPI_FPGA_RD_BURST;
-	tx_buf[1] = (unsigned char )((addr>>8)&0xff);
-	tx_buf[2] = (unsigned char)((addr) & 0xff);
+	tx_buf[1] = (unsigned char )((addr>>7)&0xff);
+	tx_buf[2] = (unsigned char)((addr<<1) & 0xff);
 	memcpy(&tx_buf[3], data_buf, size);
 #endif
 	k_xfers->tx_buf = tx_buf;
@@ -431,7 +433,7 @@ int fpga_spi_write_en()
 
         spi_message_add_tail(k_xfers, &msg);
 
-        spi->mode = 1;
+        spi->mode = 3;
         status = spi_setup(spi);
         if (status < 0)
                 goto done;
@@ -465,6 +467,7 @@ int fpga_spi_write(u16 addr, u16 size, u8 *data_buf)
 	mutex_lock(&spidev->buf_lock);
 
 	spi_message_init(&msg);
+	size = size*sizeof(unsigned short);
 
 	k_xfers = kmalloc(sizeof(*k_xfers), GFP_KERNEL);
 	tx_buf = kmalloc(sizeof(u16) * MULTI_REG_LEN_MAX + 3, GFP_KERNEL);
@@ -499,8 +502,8 @@ int fpga_spi_write(u16 addr, u16 size, u8 *data_buf)
 	memset(tx_buf, 0, sizeof(u8) * MULTI_REG_LEN_MAX + 3);
 	memset(k_xfers, 0, sizeof(*k_xfers));
 	tx_buf[0] = SPI_FPGA_WR_BURST;
-	tx_buf[1] = (unsigned char)((addr>>8)&0xff);
-	tx_buf[2] = (unsigned char)((addr) & 0xff);
+	tx_buf[1] = (unsigned char)((addr>>7)&0xff);
+	tx_buf[2] = (unsigned char)((addr<<1) & 0xff);
 
 	memcpy(&tx_buf[3], data_buf, sizeof(u8) * size);
 #if 0
