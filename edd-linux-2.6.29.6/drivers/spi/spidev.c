@@ -97,7 +97,7 @@ static struct spidev_data	 *spidev;
 static struct w25p W25Q64;
 
 
-#define BCM_SPI_WORK_BITS	32
+#define BCM_SPI_WORK_BITS	8
 #define BCM_SPI_WORK_SPEED	1000000
 #define BCM_SPI_WORK_DELAY	1
 #define BCM_SPI_WORK_MODE	0x03
@@ -340,8 +340,6 @@ int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 	spin_unlock_irq(&spidev->spi_lock);
 	mutex_lock(&spidev->buf_lock);
 
-	size = size*sizeof(unsigned short);
-
 	spi_message_init(&msg);
 
 	k_xfers = kmalloc(sizeof(*k_xfers), GFP_KERNEL);
@@ -363,14 +361,14 @@ int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 #endif
 	k_xfers->tx_buf = tx_buf;
 	k_xfers->rx_buf = rx_buf;
-	k_xfers->len = ((size + 3)/4+(size+3)%4?1:0)*4;
+	k_xfers->len = size*2+3;
 	k_xfers->delay_usecs = BCM_SPI_WORK_DELAY;
 	k_xfers->speed_hz = 6500000;
 	k_xfers->bits_per_word = BCM_SPI_WORK_BITS;
 
 	spi_message_add_tail(k_xfers, &msg);
 
-//	spi->chip_select = 0;
+	spi->chip_select = 0;
 	spi->mode = 3;
 	status = spi_setup(spi);
 	if (status < 0)
@@ -379,7 +377,7 @@ int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 	status = spi_sync(spi, &msg);
 	if (status < 0)
 		goto done;
-	memcpy(data_buf, &rx_buf[3], sizeof(u8) * size);
+	memcpy(data_buf, &rx_buf[3], sizeof(unsigned short) * size);
 #if 0
 	printk("the get data is:\n");
 
@@ -467,7 +465,6 @@ int fpga_spi_write(u16 addr, u16 size, u8 *data_buf)
 	mutex_lock(&spidev->buf_lock);
 
 	spi_message_init(&msg);
-	size = size*sizeof(unsigned short);
 
 	k_xfers = kmalloc(sizeof(*k_xfers), GFP_KERNEL);
 	tx_buf = kmalloc(sizeof(u16) * MULTI_REG_LEN_MAX + 3, GFP_KERNEL);
@@ -505,7 +502,7 @@ int fpga_spi_write(u16 addr, u16 size, u8 *data_buf)
 	tx_buf[1] = (unsigned char)((addr>>7)&0xff);
 	tx_buf[2] = (unsigned char)((addr<<1) & 0xff);
 
-	memcpy(&tx_buf[3], data_buf, sizeof(u8) * size);
+	memcpy(&tx_buf[3], data_buf, sizeof(unsigned short) * size);
 #if 0
 	printk("tx buf data:\n");
 	int i = 0;
@@ -517,18 +514,18 @@ printk("dtat_buf[0] is %x\n",data_buf[0]);
 	k_xfers->tx_buf = tx_buf;
 	k_xfers->rx_buf = NULL;
 //	k_xfers->len = sizeof(u8) * size + 4;
-	k_xfers->len = ((size + 3)/4+(size+3)%4?1:0)*4;
+	k_xfers->len = size*2 + 3;
 	k_xfers->delay_usecs = BCM_SPI_WORK_DELAY;
 	k_xfers->speed_hz = BCM_SPI_WORK_SPEED;
 	k_xfers->bits_per_word = BCM_SPI_WORK_BITS;
 
 	spi_message_add_tail(k_xfers, &msg);
 
-//	spi->chip_select = 0;
-//	spi->mode = 1;
-//	status = spi_setup(spi);
-//	if (status < 0)
-//		goto done;
+	spi->chip_select = 0;
+	spi->mode = 3;
+	status = spi_setup(spi);
+	if (status < 0)
+		goto done;
 
 	status = spi_sync(spi, &msg);
 	if (status < 0)
