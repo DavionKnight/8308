@@ -171,8 +171,8 @@ int spi_xfer(struct spi_slave *slave, unsigned int bitlen, const void *dout,
 			bitlen -= 32;
 			dout += 4;
 		}
-printf("spmode=0x%x\n",spi->mode);
-	printf("tmpdout=0x%x\n",tmpdout);
+//printf("spmode=0x%x\n",spi->mode);
+//	printf("tmpdout=0x%x\n",tmpdout);
 		spi->tx = tmpdout;	/* Write the data out */
 		debug("*** spi_xfer: ... %08x written\n", tmpdout);
 

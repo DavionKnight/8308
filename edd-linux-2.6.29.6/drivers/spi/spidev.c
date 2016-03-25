@@ -93,6 +93,8 @@ MODULE_PARM_DESC(bufsiz, "data bytes in biggest supported SPI message");
 
 #if 1 //added by yangyf at 2015-04-24
 
+static struct mutex	extLock;
+
 static struct spidev_data	 *spidev;
 static struct w25p W25Q64;
 
@@ -333,6 +335,9 @@ int fpga_spi_read(u16 addr, u16 size, u8 *data_buf)
 	struct spi_transfer	*k_xfers;
 	int i=0;
 	struct timeval tstart, tend;
+
+//	mutex_lock(&extLock);
+
 	do_gettimeofday(&tstart);
 
 	spin_lock_irq(&spidev->spi_lock);
@@ -392,7 +397,7 @@ done:
 	kfree(k_xfers);
 	kfree(tx_buf);
 	kfree(rx_buf);
-
+//	mutex_unlock(&extLock);
 	//do_gettimeofday(&tend);
 	//printk("\nread time cost: %ld us\n", 1000000*(tend.tv_sec - tstart.tv_sec) + tend.tv_usec - tstart.tv_usec);
 	
@@ -451,7 +456,8 @@ done:
 }
 int fpga_spi_write(u16 addr, u16 size, u8 *data_buf)
 {
-//	printk("before write en\n");
+//	printk("before write en\n");a
+//	mutex_lock(&extLock);
 	fpga_spi_write_en();
 	struct spi_device *spi;
 	u8 *tx_buf;
@@ -541,6 +547,9 @@ done:
 
 	kfree(k_xfers);
 	kfree(tx_buf);
+	
+//	mutex_unlock(&extLock);
+
 	return status;
 }
 EXPORT_SYMBOL(fpga_spi_write);
@@ -864,6 +873,8 @@ static int spidev_probe(struct spi_device *spi)
 	spidev->spi = spi;
 	spin_lock_init(&spidev->spi_lock);
 	mutex_init(&spidev->buf_lock);
+
+	mutex_init(&extLock);
 
 	INIT_LIST_HEAD(&spidev->device_entry);
 

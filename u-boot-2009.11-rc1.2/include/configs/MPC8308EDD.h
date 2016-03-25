@@ -82,7 +82,7 @@
 	HRCWH_SW_WATCHDOG_DISABLE |\
 	HRCWH_ROM_LOC_NAND_LP_8BIT |\
 	HRCWH_RL_EXT_NAND |\
-	HRCWH_TSEC1M_IN_RGMII |\
+	HRCWH_TSEC1M_IN_MII |\
 	HRCWH_TSEC2M_IN_MII |\
 	HRCWH_BIG_ENDIAN |\
 	HRCWH_LALE_NORMAL)
@@ -112,12 +112,12 @@
 0000	0001 	0111 	0111 	1101 	0001 	0000	0000
 */
 
-//#define CONFIG_SYS_SICRH		0x0177D100	/* MII */
-//#define CONFIG_SYS_SICRL		0x00000000
+#define CONFIG_SYS_SICRH		0x0177D100	/* MII */
+#define CONFIG_SYS_SICRL		0x00000000
 //#define CONFIG_SYS_SICRH		0x01B7F103	/* RGMII */
 //#define CONFIG_SYS_SICRH		0x00155100	/* RGMII */
 //#define CONFIG_SYS_SICRH		0x01555002	/* RGMII */
-#define CONFIG_SYS_SICRL		0x00000040
+//#define CONFIG_SYS_SICRL		0x00000040
 
 #define CONFIG_BOARD_EARLY_INIT_F /* call board_pre_init */
 #define CONFIG_HWCONFIG
@@ -577,8 +577,8 @@
 #define CONFIG_TSEC1_NAME	"eTSEC0"
 #define CONFIG_TSEC2		1
 #define CONFIG_TSEC2_NAME	"eTSEC1"
-#define TSEC1_PHY_ADDR		0x03	 /*change 0x09 to 0x03---yu20160224*/
-#define TSEC2_PHY_ADDR		0x02     /*change 0x0B to 0x02---yu20160226*/
+#define TSEC1_PHY_ADDR		0x09	 /*change 0x09 to 0x03---yu20160224*/
+#define TSEC2_PHY_ADDR		0x2     /*change 0x0B to 0x02---yu20160226*/
 #define TSEC1_PHYIDX		0
 #define TSEC2_PHYIDX		0
 #define TSEC1_FLAGS			TSEC_GIGABIT
@@ -833,10 +833,10 @@
    "bootfile=uImage\0"							\
    "fdtaddr=C00000\0"							\
    "fdtfile=mpc8308edd.dtb\0"					\
-   "ipaddr=192.168.1.1\0"					\
+   "ipaddr=10.0.0.1\0"					\
    "netmask=255.255.255.0\0"					\
-   "serverip=192.168.1.254\0"					\
-   "gatewayip=192.168.1.254\0"					\
+   "serverip=10.0.0.17\0"					\
+   "gatewayip=10.0.0.17\0"					\
    "p=ping $serverip\0"					\
    "dnalli=tftp 0x3000000 set_env.uscr; source 0x3000000\0" \
    "bootcmd=run dnalli\0" \

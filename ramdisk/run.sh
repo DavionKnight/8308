@@ -1,6 +1,6 @@
 #!/bin/sh
 
-export PATH=/opt/eldk42/usr/bin:/opt/eldk42/bin:$PATH
+export PATH=/home/kevin/Documents/ppc-tools/usr/bin:/home/kevin/Documents/ppc-tools/bin:$PATH
 rm *.gz
 cp ramdisk_tmp ramdisk
 gzip -f9 ramdisk
