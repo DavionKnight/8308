@@ -488,6 +488,7 @@
 
 #endif
 
+#if 0 /*delete for fx12*/
 /*
  * SPI - Enhanced SPI add by zhangjj 2016-3-9
  */
@@ -501,6 +502,7 @@
 #define CONFIG_SF_DEFAULT_MODE  0
 #endif
 /*add end*/
+#endif
 
 /*
  * General PCI

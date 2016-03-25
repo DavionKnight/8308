@@ -95,7 +95,7 @@ void spi_free_slave(struct spi_slave *slave)
 {
 	free(slave);
 }
-
+#if 0 /*delete for fx12*/
 void spi_init(void)
 {
 	volatile spi8xxx_t *spi = &((immap_t *) (CONFIG_SYS_IMMR))->spi;
@@ -112,7 +112,7 @@ void spi_init(void)
 	spi->com = 0;		/* LST bit doesn't do anything, so disregard */
 	printf("mode = 0x%x\n",spi->mode);
 }
-
+#endif
 int spi_claim_bus(struct spi_slave *slave)
 {
 	return 0;
