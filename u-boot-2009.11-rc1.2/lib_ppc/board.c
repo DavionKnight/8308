@@ -1051,10 +1051,12 @@ printf ("Now running in RAM - U-Boot at: %08lx\n", dest_addr);
 	mpc83xx_gpio_init_f();
 	mpc83xx_gpio_init_r();
 
+#if 0 /*delete for fx12*/
 	slave = spi_slave_init();
 	dpll_init_pre(slave);
 	//printf("board_gpio_init again here\n");
 	spi_slave_free(slave);
+#endif
 }/*add end*/
 	/* Initialization complete - start the monitor */
 

@@ -24,8 +24,8 @@ typedef struct fpga_rw_t{
 	unsigned short buf[20];
 }fpga_rw;
 
-extern int fpga_spi_read(u16 addr, u16 size, u16 *data_buf);
-extern int fpga_spi_write(u16 addr, u16 size, u16 *data_buf);
+extern int fpga_spi_read(u16 addr, u16 size, u8 *data_buf);
+extern int fpga_spi_write(u16 addr, u16 size, u8 *data_buf);
 
 static long spi_rw_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
